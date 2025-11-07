@@ -10,8 +10,12 @@
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
     "docker:restart": "docker-compose restart",
+    "minio:setup": "tsx scripts/setup-minio.ts",
     "db:migrate": "npx prisma generate && npx prisma db push",
+    "db:migrate:dev": "npx prisma migrate dev",
     "db:studio": "npx prisma studio",
+    "db:seed": "tsx scripts/seed-test-data.ts",
+    "get-user-id": "tsx scripts/get-user-id.ts",
     "dev:full": "npm run docker:up && timeout /t 10 && npm run db:migrate && npm run dev"
   },
   "dependencies": {
@@ -46,6 +50,7 @@
     "minio": "^8.0.5",
     "next": "^15.5.2",
     "next-themes": "^0.4.6",
+    "pg": "^8.16.3",
     "query-string": "^9.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -70,6 +75,7 @@
     "@types/uuid": "^10.0.0",
     "prisma": "^6.15.0",
     "tailwindcss": "^4",
+    "tsx": "^4.20.6",
     "tw-animate-css": "^1.3.8",
     "typescript": "^5.9.3"
   }

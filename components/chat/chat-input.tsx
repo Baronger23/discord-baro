@@ -63,6 +63,7 @@ export const ChatInput = ({
                             <FormControl>
                                 <div className="relative p-4 pb-6">
                                     <button
+                                        title="Add File"
                                         type="button"
                                         onClick={() => onOpen("messageFile", { apiUrl, query})}
                                         className="absolute top-7 left-8 h-[24px] w-[24px]
