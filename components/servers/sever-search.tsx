@@ -1,6 +1,6 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Command, Search } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 interface ServerSearchProps {
@@ -62,7 +62,7 @@ export const ServerSearch = ({
                     border bg-muted px-1.5 font-mono text-[10px]
                     font-medium text-muted-foreground ml-auto"
                 >
-                    <span className="text-xs">CTRL</span>K
+                    <Command className="w-[11px] h-[11px]" /> K
                 </kbd>
             </button>
             <CommandDialog open={open} onOpenChange={setOpen}>

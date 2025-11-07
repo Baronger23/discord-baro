@@ -1,5 +1,5 @@
 "use client";
-import { Fragment, useRef } from "react";
+import { Fragment, useRef, useMemo } from "react";
 import { Member, Profile, Message } from "@prisma/client";
 import { ChatWelcome } from "@/components/chat/chat-welcome";
 import { useChatQuery } from "@/hooks/use-chat-query";
@@ -60,18 +60,23 @@ export const ChatMessages = ({
     // Listen for real-time messages via Socket.IO
     useChatSocket({
         queryKey,
-        channelId: paramValue, // Use paramValue as channelId (works for both channel and conversation)
-        serverId: socketQuery.serverId, // Only present for channels, undefined for conversations
+        channelId: paramValue,
+        serverId: socketQuery.serverId,
     });
 
-    // Auto-scroll to bottom on new messages
-    useChatScroll({
+    // Auto-scroll to bottom on new messages with Intersection Observer
+    const { topTriggerRef } = useChatScroll({
         chatRef,
         bottomRef,
         loadMore: fetchNextPage,
         shouldLoadMore: !isFetchingNextPage && !!hasNextPage,
         count: data?.pages?.[0]?.items?.length ?? 0,
     });
+
+    // ✅ OPTIMIZATION: Memoize total message count to avoid recalculation
+    const totalMessages = useMemo(() => {
+        return data?.pages?.reduce((acc, page) => acc + page.items.length, 0) ?? 0;
+    }, [data]);
 
     if (status === "pending") {
         return (
@@ -97,6 +102,18 @@ export const ChatMessages = ({
 
     return (
         <div className="flex-1 flex flex-col py-4 overflow-y-auto" ref={chatRef}>
+            {/* ✅ OPTIMIZATION: Intersection Observer trigger for loading more */}
+            {hasNextPage && (
+                <div ref={topTriggerRef} className="h-1" />
+            )}
+            
+            {/* Loading indicator at top */}
+            {isFetchingNextPage && (
+                <div className="flex justify-center py-4">
+                    <Loader2 className="h-6 w-6 text-zinc-500 animate-spin" />
+                </div>
+            )}
+            
             <div className="flex-1"/>
             <ChatWelcome
                 type={type}
@@ -123,6 +140,14 @@ export const ChatMessages = ({
                     </Fragment>
                 ))}
             </div>
+            
+            {/* ✅ Show message count for debugging/info */}
+            {totalMessages > 0 && (
+                <div className="text-center text-xs text-zinc-500 dark:text-zinc-400 py-2">
+                    {totalMessages} messages loaded
+                </div>
+            )}
+            
             <div ref={bottomRef} />
         </div>
     );

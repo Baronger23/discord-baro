@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 
 interface ChatScrollProps {
     chatRef: React.RefObject<HTMLDivElement | null>;
@@ -16,30 +16,52 @@ export const useChatScroll = ({
     count,
 }: ChatScrollProps) => {
     const [hasInitialized, setHasInitialized] = useState(false);
+    const topTriggerRef = useRef<HTMLDivElement | null>(null);
+
+    // ✅ OPTIMIZATION: Use Intersection Observer for better scroll performance
+    // Instead of listening to scroll events (expensive), use IntersectionObserver
+    const handleLoadMore = useCallback(() => {
+        if (shouldLoadMore) {
+            loadMore();
+        }
+    }, [shouldLoadMore, loadMore]);
 
     useEffect(() => {
         const topDiv = chatRef?.current;
+        const trigger = topTriggerRef.current;
 
-        const handleScroll = () => {
-            const scrollTop = topDiv?.scrollTop;
+        if (!topDiv || !trigger) return;
 
-            if (scrollTop === 0 && shouldLoadMore) {
-                loadMore();
+        // ✅ Intersection Observer is more performant than scroll listeners
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const [entry] = entries;
+                // When trigger element becomes visible, load more messages
+                if (entry.isIntersecting) {
+                    handleLoadMore();
+                }
+            },
+            {
+                root: topDiv,
+                rootMargin: '100px', // Trigger 100px before reaching top
+                threshold: 0,
             }
-        };
+        );
 
-        topDiv?.addEventListener("scroll", handleScroll);
+        observer.observe(trigger);
 
         return () => {
-            topDiv?.removeEventListener("scroll", handleScroll);
+            observer.disconnect();
         };
-    }, [shouldLoadMore, loadMore, chatRef]);
+    }, [handleLoadMore, chatRef]);
 
+    // ✅ Auto-scroll to bottom on new messages
     useEffect(() => {
         const bottomDiv = bottomRef?.current;
         const topDiv = chatRef?.current;
 
         const shouldAutoScroll = () => {
+            // Always scroll on first load
             if (!hasInitialized && bottomDiv) {
                 setHasInitialized(true);
                 return true;
@@ -49,6 +71,7 @@ export const useChatScroll = ({
                 return false;
             }
 
+            // Auto-scroll if user is near bottom (within 100px)
             const distanceFromBottom = topDiv.scrollHeight - topDiv.scrollTop - topDiv.clientHeight;
             return distanceFromBottom <= 100;
         };
@@ -61,4 +84,6 @@ export const useChatScroll = ({
             }, 100);
         }
     }, [bottomRef, chatRef, count, hasInitialized]);
+
+    return { topTriggerRef };
 };

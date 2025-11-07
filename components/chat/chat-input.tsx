@@ -86,6 +86,7 @@ export const ChatInput = ({
                             <FormControl>
                                 <div className="relative p-4 pb-6">
                                     <button
+                                        title="Add File"
                                         type="button"
                                         onClick={() => onOpen("messageFile", { apiUrl, query})}
                                         disabled={type === "channel" && !canSendMessages}

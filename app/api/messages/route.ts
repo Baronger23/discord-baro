@@ -4,8 +4,9 @@ import { Message } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { canViewChannel } from "@/lib/channel-permissions";
 
-
-const MESSAGES_BATCH = 10;
+// ✅ OPTIMIZATION: Larger batch size for better performance
+// 50 messages ≈ 1-2 screens worth, reduces API calls
+const MESSAGES_BATCH = 50;
 
 export async function GET(
     req: Request
@@ -17,14 +18,15 @@ export async function GET(
         const cursor = searchParams.get("cursor");
         const channelId = searchParams.get("channelId");
 
-        if ( !profile ) {
+        if (!profile) {
             return new NextResponse("Unauthorized", { status: 401 });
         }
-        if ( !channelId ) {
+        if (!channelId) {
             return new NextResponse("Channel ID is missing", { status: 400 });
         }
 
-        // Get member ID to check permissions
+        // --- Logic từ nhánh `release/1.0` (Permission Checks) ---
+        // Lấy thông tin channel và member để kiểm tra quyền
         const channel = await db.channel.findUnique({
             where: { id: channelId },
             include: {
@@ -49,55 +51,72 @@ export async function GET(
             return new NextResponse("Not a member of this server", { status: 403 });
         }
 
-        // Check if member can view this channel
+        // Kiểm tra xem member có quyền xem channel này không
         const hasAccess = await canViewChannel(member.id, channelId);
         if (!hasAccess) {
             return new NextResponse("You don't have permission to view this channel", { status: 403 });
         }
+        // --- Kết thúc logic từ `release/1.0` ---
 
+
+        // --- Logic từ nhánh `feat/pagination` (Data Query) ---
         let messages: Message[] = [];
-        if ( cursor ) {
-            messages = await db.message.findMany({
-                take: MESSAGES_BATCH,
-                skip: 1,
-                cursor: { id: cursor },
-                where: { channelId },
-                include: {
-                    member: {
-                        include: { profile: true }
-                    }
-                },
-                orderBy: { createdAt: 'desc' }
-            });
-        }
-        else {
-            messages = await db.message.findMany({
-                take: MESSAGES_BATCH,
-                where: {
-                    channelId,
-                },
-                include: { 
-                    member: {
-                        include: { profile: true }
-                    }
-                },
-                orderBy: { createdAt: 'desc' }
-            });
-        }
         
-        let nextCursor= null;
-        if ( messages.length === MESSAGES_BATCH ) {
+        messages = await db.message.findMany({
+            take: MESSAGES_BATCH,
+            ...(cursor && { 
+                skip: 1, 
+                cursor: { id: cursor } 
+            }),
+            where: { 
+                channelId,
+                deleted: false  // ✅ Filter tin nhắn đã xóa ở cấp DB
+            },
+            include: {
+                member: {
+                    include: { 
+                        profile: {
+                            select: {  // ✅ Chỉ chọn các trường cần thiết
+                                id: true,
+                                name: true,
+                                imageUrl: true,
+                                email: true,
+                            }
+                        }
+                    }
+                }
+            },
+            orderBy: { 
+                createdAt: 'desc' 
+            }
+        });
+        
+        // ✅ OPTIMIZATION: Kiểm tra trang tiếp theo
+        let nextCursor = null;
+        if (messages.length === MESSAGES_BATCH) {
             nextCursor = messages[MESSAGES_BATCH - 1].id;
         }
 
         return NextResponse.json({
             items: messages,
             nextCursor,
+        }, {
+            headers: {
+                // ✅ Cache 5 giây để giảm tải database
+                'Cache-Control': 'private, max-age=5',
+            }
         });
 
-    }
-    catch (error) {
-        console.log("[MESSAGES_GET]", error);
+    } catch (error) {
+        console.error("[MESSAGES_GET]", error);
         return new NextResponse("Internal error", { status: 500 });
     }
 }
+
+// ✅ PERFORMANCE TIP: Add these indexes to your database for optimal performance
+// Run in Prisma Studio or directly in PostgreSQL:
+// 
+// CREATE INDEX idx_message_channel_created ON "Message"("channelId", "createdAt" DESC);
+// CREATE INDEX idx_message_channel_deleted ON "Message"("channelId", "deleted", "createdAt" DESC);
+// 
+// These indexes make cursor-based pagination O(1) instead of O(n)

@@ -27,6 +27,7 @@ export const NavigationItem = ({
             label={name}
         >
             <button
+                title="Navigate to Server"
                 onClick={onClick}
                 className="group flex items-center relative"
             >
@@ -43,7 +44,10 @@ export const NavigationItem = ({
                     <Image
                         fill
                         src={imageUrl}
-                        alt="Channel"
+                        alt={name}
+                        sizes="48px"
+                        unoptimized={imageUrl.includes('dicebear.com')}
+                        className="object-cover"
                     />
                 </div>
             </button>

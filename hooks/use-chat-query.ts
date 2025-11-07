@@ -45,7 +45,18 @@ export const useChatQuery = ({
         queryKey: [queryKey],
         queryFn: fetchMessages,
         getNextPageParam: (lastPage) => lastPage?.nextCursor,
-        refetchInterval: 1000, 
+        
+        // ✅ OPTIMIZATION: Smart refetch strategy
+        // When socket connected: No polling (real-time updates via socket)
+        // When socket disconnected: Poll every 1s as fallback
+        refetchInterval: isConnected ? false : 1000,
+        
+        // ✅ OPTIMIZATION: Only refetch on window focus if disconnected
+        refetchOnWindowFocus: !isConnected,
+        
+        // ✅ OPTIMIZATION: Keep data fresh but reduce network requests
+        staleTime: 1000 * 60, // Data fresh for 1 minute
+        
         initialPageParam: undefined,
     });
 
