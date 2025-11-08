@@ -61,6 +61,11 @@ const DeleteMessageModal = dynamic(
     { ssr: false }
 );
 
+const ManageChannelPermissionsModal = dynamic(
+    () => import("@/components/modals/manage-channel-permissions-modal").then(mod => ({ default: mod.ManageChannelPermissionsModal })),
+    { ssr: false }
+);
+
 export const ModalProvider = () => {
 
     const [isMounted, setIsMounted] = useState(false);

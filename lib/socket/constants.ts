@@ -5,6 +5,7 @@ export const serverRoom = (serverId: string) => `server:${serverId}`;
 
 export const SOCKET_EVENTS = {
   CHAT_MESSAGE: "chat:message" as const,
+  CHAT_MESSAGE_UPDATE: "chat:message:update" as const,
   CHAT_TYPING: "chat:typing" as const,
   CHAT_JOIN: "chat:join" as const,
   CHAT_LEAVE: "chat:leave" as const,

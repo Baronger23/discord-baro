@@ -2,7 +2,7 @@ import { currentProfilePages } from '@/lib/current-profile-pages';
 import { db } from '@/lib/db';
 import type { NextApiRequest } from 'next';
 import type { NextApiResponseServerIo } from '@/type';
-import { emitChannelMessage } from '@/lib/socket/server';
+import { emitChannelMessageUpdate } from '@/lib/socket/server';
 import { MemberRole } from '@prisma/client';
 
 export default async function handler(
@@ -124,7 +124,7 @@ export default async function handler(
             });
 
             // Emit update to all clients
-            emitChannelMessage(channel.id, message);
+            emitChannelMessageUpdate(channel.id, message);
 
             return res.status(200).json(message);
         }
@@ -159,7 +159,7 @@ export default async function handler(
             });
 
             // Emit update to all clients
-            emitChannelMessage(channel.id, message);
+            emitChannelMessageUpdate(channel.id, message);
 
             return res.status(200).json(message);
         }

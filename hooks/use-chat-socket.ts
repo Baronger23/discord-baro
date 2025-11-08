@@ -28,6 +28,7 @@ export const useChatSocket = ({
 
     useEffect(() => {
         if (!socket || !isConnected || !channelId) {
+            console.log('[useChatSocket] Skipping setup:', { socket: !!socket, isConnected, channelId });
             return;
         }
 
@@ -38,6 +39,7 @@ export const useChatSocket = ({
         
         console.log(`[useChatSocket] Joining room: ${roomName}`);
         console.log(`[useChatSocket] serverId: ${serverId}, channelId: ${channelId}`);
+        console.log(`[useChatSocket] queryKey: ${queryKey}`);
         
         // Join room directly via Socket.IO
         // Server will receive this via socket.join() in io.on('connection')
@@ -97,43 +99,73 @@ export const useChatSocket = ({
         const handleUpdateMessage = (payload: { channelId: string; message: MessageWithMember | DirectMessageWithMember }) => {
             const { channelId: messageChannelId, message } = payload;
 
+            console.log('[useChatSocket] Received message update:', message.id);
+
             // Only update if message is for this channel/conversation
             if (channelId && messageChannelId !== channelId) {
+                console.log('[useChatSocket] Update ignored - different channel');
                 return;
             }
 
+            let messageUpdated = false;
+
             queryClient.setQueryData([queryKey], (oldData: MessagePages | undefined) => {
                 if (!oldData || !oldData.pages || oldData.pages.length === 0) {
+                    console.log('[useChatSocket] No data to update');
                     return oldData;
                 }
 
-                const newData = oldData.pages.map((page) => {
+                // Create completely new objects to trigger React re-render
+                const newPages = oldData.pages.map((page) => {
+                    const newItems = page.items.map((item) => {
+                        if (item.id === message.id) {
+                            console.log('[useChatSocket] Updated message found and replaced');
+                            messageUpdated = true;
+                            // Return new message object
+                            return { ...message };
+                        }
+                        return item;
+                    });
+
+                    // Return new page object if items changed
                     return {
                         ...page,
-                        items: page.items.map((item) => {
-                            if (item.id === message.id) {
-                                return message;
-                            }
-                            return item;
-                        }),
+                        items: newItems,
                     };
                 });
 
+                // Return completely new data object
                 return {
                     ...oldData,
-                    pages: newData,
+                    pages: newPages,
+                    pageParams: [...oldData.pageParams],
                 };
             });
+
+            if (messageUpdated) {
+                // Force re-render by invalidating the query
+                queryClient.invalidateQueries({ 
+                    queryKey: [queryKey],
+                    refetchType: 'none' // Don't refetch from server, just trigger re-render
+                });
+                
+                console.log('[useChatSocket] ✅ Message updated and query invalidated');
+            } else {
+                console.log('[useChatSocket] ⚠️ Message not found in cache');
+            }
         };
 
         // Register event listeners
+        console.log('[useChatSocket] Registering event listeners...');
         socket.on(SOCKET_EVENTS.CHAT_MESSAGE, handleNewMessage);
-        socket.on(SOCKET_EVENTS.CHAT_MESSAGE, handleUpdateMessage);
+        socket.on(SOCKET_EVENTS.CHAT_MESSAGE_UPDATE, handleUpdateMessage);
+        console.log('[useChatSocket] ✅ Event listeners registered');
 
         // Cleanup
         return () => {
+            console.log('[useChatSocket] Cleaning up event listeners...');
             socket.off(SOCKET_EVENTS.CHAT_MESSAGE, handleNewMessage);
-            socket.off(SOCKET_EVENTS.CHAT_MESSAGE, handleUpdateMessage);
+            socket.off(SOCKET_EVENTS.CHAT_MESSAGE_UPDATE, handleUpdateMessage);
         };
-    }, [socket, isConnected, queryClient, queryKey, channelId]);
+    }, [socket, isConnected, queryClient, queryKey, channelId, serverId]);
 };

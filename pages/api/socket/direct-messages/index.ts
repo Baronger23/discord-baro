@@ -208,7 +208,7 @@ export default async function handler (
 
                 // Emit update to all clients in conversation
                 const conversationKey = `conversation:${conversation.id}`;
-                res?.socket?.server?.io?.to(conversationKey).emit(SOCKET_EVENTS.CHAT_MESSAGE, {
+                res?.socket?.server?.io?.to(conversationKey).emit(SOCKET_EVENTS.CHAT_MESSAGE_UPDATE, {
                     channelId: conversation.id,
                     message
                 });
@@ -246,7 +246,7 @@ export default async function handler (
 
                 // Emit update to all clients in conversation
                 const conversationKey = `conversation:${conversation.id}`;
-                res?.socket?.server?.io?.to(conversationKey).emit(SOCKET_EVENTS.CHAT_MESSAGE, {
+                res?.socket?.server?.io?.to(conversationKey).emit(SOCKET_EVENTS.CHAT_MESSAGE_UPDATE, {
                     channelId: conversation.id,
                     message
                 });

@@ -318,3 +318,15 @@ export const emitChannelMessage = (channelId: string, message: MessageWithMember
     }
   }
 };
+
+export const emitChannelMessageUpdate = (channelId: string, message: MessageWithMember) => {
+  const io = ioInstance;
+  if (!io) {
+    return;
+  }
+  const messagePayload: ChatMessagePayload = {
+    channelId,
+    message,
+  };
+  io.to(channelRoom(channelId)).emit(SOCKET_EVENTS.CHAT_MESSAGE_UPDATE, messagePayload);
+};

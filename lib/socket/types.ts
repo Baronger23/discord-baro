@@ -29,6 +29,10 @@ export type ServerToClientEvents = {
     channelId: string;
     message: MessageWithMember;
   }) => void;
+  "chat:message:update": (payload: {
+    channelId: string;
+    message: MessageWithMember | DirectMessageWithMember;
+  }) => void;
   "chat:typing": (payload: {
     channelId: string;
     profileId: string;
