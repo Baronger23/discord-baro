@@ -14,6 +14,12 @@ const nextConfig: NextConfig = {
         hostname: 'utfs.io',
         pathname: '/**',
       },
+      // Giữ lại từ nhánh feat/Pinned-messages
+      {
+        protocol: 'https',
+        hostname: 'img.clerk.com',
+        pathname: '/**',
+      },
       {
         protocol: 'https',
         hostname: 'api.dicebear.com',
@@ -21,6 +27,7 @@ const nextConfig: NextConfig = {
       }
     ],
   },
+};
   // Tối ưu bundle size và code splitting
   experimental: {
     optimizePackageImports: [

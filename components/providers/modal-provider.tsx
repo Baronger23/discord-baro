@@ -65,6 +65,12 @@ const ManageChannelPermissionsModal = dynamic(
     { ssr: false }
 );
 
+// Modal mới từ nhánh feat/Pinned-messages, cũng được áp dụng lazy loading
+const ViewPinnedMessagesModal = dynamic(
+    () => import("@/components/modals/view-pinned-messages-modal").then(mod => ({ default: mod.ViewPinnedMessagesModal })),
+    { ssr: false }
+);
+
 export const ModalProvider = () => {
     const [isMounted, setIsMounted] = useState(false);
     
@@ -72,6 +78,8 @@ export const ModalProvider = () => {
         setIsMounted(true);
     }, []);
 
+    // Logic isMounted để tránh lỗi Hydration Mismatch
+    // Modals không nên render phía server
     if (!isMounted) {
         return null;
     }
@@ -90,6 +98,7 @@ export const ModalProvider = () => {
             <MessageFileModal />
             <DeleteMessageModal />
             <ManageChannelPermissionsModal />
+            <ViewPinnedMessagesModal />
         </>
     );
 };

@@ -55,6 +55,12 @@ export const ChatInput = ({
             });
             
             form.reset();
+            
+            // Keep focus on input after sending
+            setTimeout(() => {
+                const input = document.querySelector('input[name="content"]') as HTMLInputElement;
+                input?.focus();
+            }, 0);
         }
         catch(error ){
             console.error("Error sending message:", error);

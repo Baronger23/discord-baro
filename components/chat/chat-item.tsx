@@ -17,6 +17,8 @@ import {
     FileAudio,
     Volume2,
     Play,
+    Pin,
+    PinOff,
 } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -45,6 +47,8 @@ interface ChatItemProps {
     isUpdated: boolean;
     socketUrl: string;
     socketQuery: Record<string, string>;
+    pinned?: boolean;
+    pinnedAt?: Date | null;
 }
 
 const roleIconMap = {
@@ -69,9 +73,12 @@ const ChatItemComponent = ({
     currentMember,
     isUpdated,
     socketUrl,
-    socketQuery
+    socketQuery,
+    pinned = false,
+    pinnedAt = null,
 }: ChatItemProps) => {
     const [isEditing, setIsEditing] = useState(false);
+    const [isPinning, setIsPinning] = useState(false);
     const { onOpen } = useModal();
     const router = useRouter();
     
@@ -117,6 +124,7 @@ const ChatItemComponent = ({
     const isOwner = currentMember.id === member.id;
     const canDeleteMessage = !deleted && (isAdmin || isModerator || isOwner);
     const canEditMessage = !deleted && isOwner && !fileUrl;
+    const canPinMessage = !deleted && (isAdmin || isModerator); // Only ADMIN/MODERATOR can pin
 
     // File type checks
     const isImage = fileType && ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(fileType);
@@ -145,6 +153,25 @@ const ChatItemComponent = ({
         }
     };
 
+    const handlePinToggle = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        
+        try {
+            setIsPinning(true);
+            if (pinned) {
+                await axios.delete(`/api/messages/${id}/pin`);
+            } else {
+                await axios.post(`/api/messages/${id}/pin`);
+            }
+            router.refresh();
+        } catch (error) {
+            console.error("Failed to toggle pin:", error);
+        } finally {
+            setIsPinning(false);
+        }
+    };
+
     const getFileIcon = () => {
         if (isImage) return <FileImage className="h-10 w-10 text-blue-500" />;
         if (isVideo) return <FileVideo className="h-10 w-10 text-purple-500" />;
@@ -160,7 +187,10 @@ const ChatItemComponent = ({
     };
 
     return (
-        <div className="relative group flex items-start hover:bg-black/5 dark:hover:bg-zinc-700/10 p-4 transition w-full">
+        <div 
+            id={`message-${id}`}
+            className="relative group flex items-start hover:bg-black/5 dark:hover:bg-zinc-700/10 p-4 transition w-full"
+        >
             {/* Avatar */}
             <div 
                 onClick={onMemberClick}
@@ -366,9 +396,34 @@ const ChatItemComponent = ({
                 )}
             </div>
 
-            {/* Action Buttons (Edit & Delete) */}
-            {canDeleteMessage && (
+            {/* Action Buttons (Pin, Edit & Delete) */}
+            {(canDeleteMessage || canPinMessage) && (
                 <div className="hidden group-hover:flex items-center gap-x-2 absolute p-1 -top-2 right-5 bg-white dark:bg-zinc-800 border rounded-sm">
+                    {canPinMessage && (
+                        <ActionTooltip label={pinned ? "Unpin" : "Pin"}>
+                            {pinned ? (
+                                <PinOff
+                                    onClick={(e) => {
+                                        if (!isPinning) handlePinToggle(e);
+                                    }}
+                                    className={cn(
+                                        "cursor-pointer ml-auto w-4 h-4 text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition",
+                                        isPinning && "opacity-50 cursor-not-allowed"
+                                    )}
+                                />
+                            ) : (
+                                <Pin
+                                    onClick={(e) => {
+                                        if (!isPinning) handlePinToggle(e);
+                                    }}
+                                    className={cn(
+                                        "cursor-pointer ml-auto w-4 h-4 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition",
+                                        isPinning && "opacity-50 cursor-not-allowed"
+                                    )}
+                                />
+                            )}
+                        </ActionTooltip>
+                    )}
                     {canEditMessage && (
                         <ActionTooltip label="Edit">
                             <Edit
@@ -377,16 +432,18 @@ const ChatItemComponent = ({
                             />
                         </ActionTooltip>
                     )}
-                    <ActionTooltip label="Delete">
-                        <Trash
-                            onClick={() => onOpen("deleteMessage", {
-                                apiUrl: socketUrl,
-                                query: socketQuery,
-                                messageId: id,
-                            })}
-                            className="cursor-pointer ml-auto w-4 h-4 text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400 transition"
-                        />
-                    </ActionTooltip>
+                    {canDeleteMessage && (
+                        <ActionTooltip label="Delete">
+                            <Trash
+                                onClick={() => onOpen("deleteMessage", {
+                                    apiUrl: socketUrl,
+                                    query: socketQuery,
+                                    messageId: id,
+                                })}
+                                className="cursor-pointer ml-auto w-4 h-4 text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400 transition"
+                            />
+                        </ActionTooltip>
+                    )}
                 </div>
             )}
         </div>

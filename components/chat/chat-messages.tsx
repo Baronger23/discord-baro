@@ -130,9 +130,16 @@ export const ChatMessages = ({
                                 fileUrl={message.fileUrl}
                                 deleted={message.deleted}
                                 timestamp={format(new Date(message.createdAt), DATE_FORMAT)}
-                                isUpdated={message.updatedAt !== message.createdAt}
+                                isUpdated={
+                                    message.updatedAt !== message.createdAt && 
+                                    // Don't show "edited" if update was just for pinning
+                                    (!message.pinnedAt || 
+                                     Math.abs(new Date(message.updatedAt).getTime() - new Date(message.pinnedAt).getTime()) > 1000)
+                                }
                                 socketUrl={socketUrl}
                                 socketQuery={socketQuery}
+                                pinned={message.pinned}
+                                pinnedAt={message.pinnedAt}
                             />
                         ))}
                     </Fragment>

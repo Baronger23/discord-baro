@@ -2,11 +2,12 @@
 
 ## 📚 Overview
 
-Hệ thống chat hooks được xây dựng trên Socket.IO với 3 hooks chính:
+Hệ thống chat hooks được xây dựng trên Socket.IO với 4 hooks chính:
 
 1. **`useChatQuery`** - Fetch messages với pagination
 2. **`useChatSocket`** - Listen real-time messages qua Socket.IO
 3. **`useChatScroll`** - Auto-scroll và load more
+4. **`useNotificationSocket`** - Listen và hiển thị notifications real-time
 
 ---
 
@@ -107,6 +108,97 @@ useChatScroll({
 
 ---
 
+## 🔔 4. useNotificationSocket
+
+### Công dụng:
+- Listen `notification:new` event từ Socket.IO server
+- Hiển thị toast notification popup (giống Facebook/Messenger)
+- Auto invalidate React Query cache để update unread badges
+- Chỉ nhận notifications khi user KHÔNG phải người gửi
+
+### Usage:
+```typescript
+// Chỉ cần gọi 1 lần trong root component hoặc layout
+useNotificationSocket();
+```
+
+### Notification Payload:
+```typescript
+{
+    serverId: string,       // ID của server
+    channelId: string,      // ID của channel
+    messageId: string,      // ID của message
+    preview: string,        // Nội dung message (120 ký tự đầu)
+    senderName: string,     // Tên người gửi
+}
+```
+
+### Toast Features:
+- ✅ **Position**: Bottom-right corner
+- ✅ **Duration**: 5 seconds (auto dismiss)
+- ✅ **Title**: Tên người gửi
+- ✅ **Description**: Preview message content
+- ✅ **Action Button**: "Xem" (navigate to message)
+
+### Flow:
+```
+User A sends message
+        ↓
+Backend emits notification:new to User B (NOT User A)
+        ↓
+useNotificationSocket receives event
+        ↓
+┌─────────────────┬─────────────────┐
+│                 │                 │
+▼                 ▼                 ▼
+Invalidate      Show Toast      (Optional)
+Query Cache     Notification    Navigate
+│               │               │
+└───────────────┴───────────────┘
+```
+
+### Example Integration:
+```typescript
+// app/layout.tsx hoặc root component
+"use client";
+
+import { useNotificationSocket } from "@/hooks/use-notification-socket";
+
+export default function RootLayout({ children }) {
+    // Listen notifications globally
+    useNotificationSocket();
+
+    return <div>{children}</div>;
+}
+```
+
+### Backend Integration:
+```typescript
+// pages/api/socket/messages/index.ts
+const io = res?.socket?.server?.io;
+
+// Emit notification chỉ cho người NHẬN
+const room = io.sockets.adapter.rooms.get(`channel:${channelId}`);
+if (room) {
+    for (const socketId of room) {
+        const socket = io.sockets.sockets.get(socketId);
+        
+        // Only emit if socket is NOT the sender
+        if (socket && socket.data.profileId !== senderProfileId) {
+            socket.emit("notification:new", {
+                serverId: server.id,
+                channelId: channel.id,
+                messageId: message.id,
+                preview: content.slice(0, 120),
+                senderName: sender.name,
+            });
+        }
+    }
+}
+```
+
+---
+
 ## 🎯 Complete Example
 
 ```typescript
@@ -116,6 +208,7 @@ import { useRef } from "react";
 import { useChatQuery } from "@/hooks/use-chat-query";
 import { useChatSocket } from "@/hooks/use-chat-socket";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
+import { useNotificationSocket } from "@/hooks/use-notification-socket";
 
 export default function ChannelPage({ params }: { params: { channelId: string } }) {
     const queryKey = `chat:${params.channelId}`;
@@ -144,6 +237,9 @@ export default function ChannelPage({ params }: { params: { channelId: string } 
         shouldLoadMore: !isFetchingNextPage && !!hasNextPage,
         count: data?.pages?.[0]?.items?.length ?? 0,
     });
+
+    // 4️⃣ Notifications (usually in layout, shown here for completeness)
+    useNotificationSocket();
 
     return (
         <div ref={chatRef} className="flex-1 overflow-y-auto">
@@ -220,10 +316,19 @@ export default function ChannelPage({ params }: { params: { channelId: string } 
 
 ### Socket.IO Events
 ```typescript
-// Server → Client
+// Server → Client: New message
 socket.emit("chat:message", {
     channelId: string,
     message: MessageWithMember
+});
+
+// Server → Client: New notification
+socket.emit("notification:new", {
+    serverId: string,
+    channelId: string,
+    messageId: string,
+    preview: string,
+    senderName: string
 });
 ```
 
@@ -285,8 +390,10 @@ Make sure `SocketProvider` wraps your app:
 - [x] useChatQuery fetches messages
 - [x] useChatSocket listens for real-time updates
 - [x] useChatScroll handles auto-scroll and pagination
+- [x] useNotificationSocket shows toast notifications
 - [x] React Query cache updates correctly
 - [x] TypeScript types are correct
 - [x] No duplicate messages
+- [x] Notifications only sent to receivers (not senders)
 
-**🎉 All done! Your chat is now real-time with Socket.IO!**
+**🎉 All done! Your chat is now real-time with Socket.IO + Notifications!**

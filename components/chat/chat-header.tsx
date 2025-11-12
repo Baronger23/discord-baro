@@ -1,22 +1,26 @@
-import { Hash, Menu } from "lucide-react";
+import { Hash } from "lucide-react";
 import { MobileToggle } from "@/components/ui/mobile-toggle";
 import { UserAvatar } from "@/components/user-avatar";
 import { SocketIndicator } from "@/components/socket-indicator";
 import { ChatVideoButton } from "@/components/chat/chat-video-button";
+import { PinnedMessagesButton } from "@/components/chat/pinned-messages-button";
 
 interface ChatHeaderProps {
     serverId: string;
     name: string;
     type: "channel" | "conversation";
     imageUrl?: string;
+    channelId?: string;
 }
 
 export const ChatHeader = ({
     serverId,
     name,
     type,
-    imageUrl
-}: ChatHeaderProps) => {   
+    imageUrl,
+    channelId
+}: ChatHeaderProps) => {
+    
     return (
         <div className="text-md font-semibold px-3 flex items-center h-12
         border-neutral-200 dark:border-neutral-800 border-b">
@@ -35,7 +39,10 @@ export const ChatHeader = ({
             <p className="font-semibold text-md text-black dark:text-white">
                 {name}
             </p>
-            <div className="ml-auto flex items-center">
+            <div className="ml-auto flex items-center gap-x-2">
+                {type === "channel" && channelId && (
+                    <PinnedMessagesButton channelId={channelId} />
+                )}
                 {type === "conversation" && (
                   <ChatVideoButton/>  
                 )}
