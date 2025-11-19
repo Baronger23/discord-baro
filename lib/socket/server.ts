@@ -339,6 +339,7 @@ const registerCoreEvents = (io: TypedIOServer) => {
         videoEnabled,
         screenSharing,
       });
+    });
     // ============================================
     // WHITEBOARD EVENTS
     // ============================================
@@ -496,6 +497,7 @@ const registerCoreEvents = (io: TypedIOServer) => {
     });
   });
 };
+
 
 export const initSocketServer = (httpServer: NetServer): TypedIOServer => {
   if (ioInstance) {
