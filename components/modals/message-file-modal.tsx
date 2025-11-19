@@ -2,7 +2,7 @@
 import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
 import {
     Dialog,
@@ -51,6 +51,13 @@ export const MessageFileModal = () => {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
     const MAX_FILES = 5;
+
+    // Debug: Log when modal opens - use useEffect to avoid multiple logs
+    useEffect(() => {
+        if (isModalOpen) {
+            console.log("📂 MessageFileModal opened with:", { apiUrl, query });
+        }
+    }, [isModalOpen, apiUrl, query]);
     
     const form = useForm({
         resolver: zodResolver(formSchema),
@@ -58,6 +65,16 @@ export const MessageFileModal = () => {
             fileUrls: []
         },
     });
+
+    // Auto-update form when files are uploaded/removed
+    useEffect(() => {
+        const completedFiles = uploadedFiles.filter(f => f.status === 'completed' && f.fileUrl);
+        const fileUrls = completedFiles.map(f => f.fileUrl);
+        form.setValue('fileUrls', fileUrls);
+        if (fileUrls.length > 0) {
+            console.log("📝 Form fileUrls updated:", fileUrls);
+        }
+    }, [uploadedFiles, form]);
 
     const handleClose = () => {
         form.reset();
@@ -172,10 +189,6 @@ export const MessageFileModal = () => {
                 setUploadProgress(((i + 1) / files.length) * 100);
             }
             
-            // Update form value with only completed files
-            const completedFiles = uploadedFiles.filter(f => f.status === 'completed' && f.fileUrl);
-            form.setValue('fileUrls', completedFiles.map(f => f.fileUrl));
-            
         } catch (error) {
             console.error('Upload error:', error);
         } finally {
@@ -189,8 +202,7 @@ export const MessageFileModal = () => {
     const handleRemoveFile = (index: number) => {
         const updatedFiles = uploadedFiles.filter((_, i) => i !== index);
         setUploadedFiles(updatedFiles);
-        const completedFiles = updatedFiles.filter(f => f.status === 'completed' && f.fileUrl);
-        form.setValue('fileUrls', completedFiles.map(f => f.fileUrl));
+        // Form will be auto-updated by useEffect
     };
 
     const handleRetryFile = async (index: number) => {
@@ -230,34 +242,69 @@ export const MessageFileModal = () => {
     const isLoading = form.formState.isSubmitting;
     
     const onSubmit = async (values: z.infer<typeof formSchema>) => {
+        console.log("🚀 Form submitted with values:", values);
+        console.log("📊 Current uploadedFiles:", uploadedFiles);
+        
         try {
-            const url = apiUrl || "/api/socket/messages";
-
-            // Send only completed files as separate messages
+            // Send only completed files
             const completedFiles = uploadedFiles.filter(f => f.status === 'completed' && f.fileUrl);
+            
+            if (completedFiles.length === 0) {
+                console.error("❌ No completed files to send!");
+                alert("No files to send!");
+                return;
+            }
+
+            console.log("📤 Preparing to send files:", {
+                fileCount: completedFiles.length,
+                query
+            });
+
+            // Use Socket.IO endpoint for real-time messages
+            const url = "/api/socket/messages";
             
             for (const file of completedFiles) {
                 const payload = {
-                    content: `📎 ${file.fileName}`,
+                    content: file.fileName || "File attachment", // Ensure content is not empty
                     fileUrl: file.fileUrl,
-                    ...query
+                    channelId: query?.channelId,
+                    serverId: query?.serverId,
                 };
 
-                await axios.post(url, payload);
+                console.log("📨 Sending file message:", payload);
+                
+                // Validate required fields
+                if (!payload.channelId) {
+                    throw new Error("Channel ID is missing");
+                }
+                if (!payload.serverId) {
+                    throw new Error("Server ID is missing");
+                }
+                if (!payload.fileUrl) {
+                    throw new Error("File URL is missing");
+                }
+                
+                const response = await axios.post(url, payload);
+                console.log("✅ File sent:", response.data);
             }
             
+            console.log("✅ All files sent successfully!");
             form.reset();
             setUploadedFiles([]);
             router.refresh();
             handleClose();
         }
         catch (error) {
-            console.error("Error sending files:", error);
+            console.error("❌ Error sending files:", error);
             if (axios.isAxiosError(error)) {
-                console.error("Response data:", error.response?.data);
-                alert(`Failed to send files: ${error.response?.data?.error || error.message}`);
+                console.error("Response:", error.response?.data);
+                console.error("Status:", error.response?.status);
+                const errorMsg = error.response?.data?.error || error.message;
+                alert(`Failed to send files: ${errorMsg}`);
+            } else if (error instanceof Error) {
+                alert(`Failed to send files: ${error.message}`);
             } else {
-                alert("Failed to send files");
+                alert("Failed to send files. Check console for details.");
             }
         }
     };
@@ -349,7 +396,7 @@ export const MessageFileModal = () => {
                                                                     {/* File Info */}
                                                                     <div className="flex-1 ml-3 min-w-0 overflow-hidden">
                                                                         <div className="flex items-center gap-2">
-                                                                            <p className="text-sm font-medium text-zinc-900 truncate max-w-[280px]">
+                                                                            <p className="text-sm font-medium text-zinc-900 truncate max-w-[250px]" title={file.fileName}>
                                                                                 {file.fileName}
                                                                             </p>
                                                                             {/* Status Icon */}
@@ -406,6 +453,7 @@ export const MessageFileModal = () => {
                                                                     
                                                                     {/* Remove Button */}
                                                                     <button
+                                                                        title="Remove file"
                                                                         onClick={() => handleRemoveFile(index)}
                                                                         type="button"
                                                                         className={`flex-shrink-0 p-1.5 rounded-full shadow-sm transition ${

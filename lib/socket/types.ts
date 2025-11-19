@@ -24,6 +24,28 @@ export type PresenceUser = {
   lastSeenAt: number;
 };
 
+// Whiteboard types
+export type DrawPoint = {
+  x: number;
+  y: number;
+};
+
+export type DrawCommand = {
+  id: string;
+  type: "draw" | "erase";
+  points: DrawPoint[];
+  color: string;
+  width: number;
+  timestamp: number;
+  profileId: string;
+  displayName: string;
+};
+
+export type WhiteboardState = {
+  commands: DrawCommand[];
+  version: number;
+};
+
 export type ServerToClientEvents = {
   "chat:message": (payload: {
     channelId: string;
@@ -89,6 +111,23 @@ export type ServerToClientEvents = {
     audioEnabled?: boolean;
     videoEnabled?: boolean;
     screenSharing?: boolean;
+  
+  // Whiteboard events (server -> client)
+  "whiteboard:draw": (payload: {
+    channelId: string;
+    command: DrawCommand;
+  }) => void;
+  "whiteboard:state": (payload: {
+    channelId: string;
+    state: WhiteboardState;
+  }) => void;
+  "whiteboard:clear": (payload: {
+    channelId: string;
+    clearedBy: string;
+  }) => void;
+  "whiteboard:undo": (payload: {
+    channelId: string;
+    commandId: string;
   }) => void;
 };
 
@@ -115,6 +154,7 @@ export type ClientToServerEvents = {
   "presence:ping": (payload: {
     channels: string[];
   }) => void;
+ 
   // WebRTC Signaling Events (Client to Server)
   "webrtc:join-room": (payload: {
     roomId: string;
@@ -150,6 +190,25 @@ export type ClientToServerEvents = {
     audioEnabled?: boolean;
     videoEnabled?: boolean;
     screenSharing?: boolean;
+  
+  // Whiteboard events (client -> server)
+  "whiteboard:join": (payload: {
+    serverId: string;
+    channelId: string;
+  }) => void;
+  "whiteboard:leave": (payload: {
+    channelId: string;
+  }) => void;
+  "whiteboard:draw": (payload: {
+    channelId: string;
+    command: Omit<DrawCommand, "id" | "timestamp">;
+  }) => void;
+  "whiteboard:clear": (payload: {
+    channelId: string;
+  }) => void;
+  "whiteboard:undo": (payload: {
+    channelId: string;
+    commandId: string;
   }) => void;
 };
 

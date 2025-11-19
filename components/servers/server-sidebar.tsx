@@ -2,7 +2,7 @@ import { currentProfile } from "@/lib/current-profile";
 import { ChannelType, Channel, Member, Profile, MemberRole } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { Hash, Scroll, Server, Video, Mic, ShieldCheck, ShieldAlert, Lock } from "lucide-react";
+import { Hash, Scroll, Server, Video, Mic, ShieldCheck, ShieldAlert, Lock, PenTool } from "lucide-react";
 import { ServerHeader } from "./server-header";
 import { ScrollArea } from "../ui/scroll-area";
 import { ServerSearch } from "./sever-search";
@@ -19,6 +19,7 @@ const iconMap= {
     [ChannelType.TEXT]: <Hash className="mr-2 h-4 w-4" />,
     [ChannelType.AUDIO]: <Mic className="mr-2 h-4 w-4" />,
     [ChannelType.VIDEO]: <Video className="mr-2 h-4 w-4" />,
+    [ChannelType.WHITEBOARD]: <PenTool className="mr-2 h-4 w-4" />,
 }
 
 const roleIconMap= {
@@ -71,6 +72,7 @@ export const ServerSidebar = async ({
     const textChannels = accessibleChannels.filter((channel) => channel.type === ChannelType.TEXT);
     const audioChannels = accessibleChannels.filter((channel) => channel.type === ChannelType.AUDIO);
     const videoChannels = accessibleChannels.filter((channel) => channel.type === ChannelType.VIDEO);
+    const whiteboardChannels = accessibleChannels.filter((channel) => channel.type === ChannelType.WHITEBOARD);
 
     const members = server?.members.filter((member: Member & { profile: Profile }) => member.profileId !== profile.id);
     
@@ -108,6 +110,15 @@ export const ServerSidebar = async ({
                                 label: "Video Channels",
                                 type: "channel",
                                 data: videoChannels?.map((channel) => ({
+                                    id: channel.id,
+                                    name: channel.name,
+                                    icon: iconMap[channel.type] 
+                                }))
+                            },
+                            {
+                                label: "Whiteboard Channels",
+                                type: "channel",
+                                data: whiteboardChannels?.map((channel) => ({
                                     id: channel.id,
                                     name: channel.name,
                                     icon: iconMap[channel.type] 
@@ -186,6 +197,27 @@ export const ServerSidebar = async ({
                                 server={server}
                             />
                         ))}
+                        </div>
+                    </div>
+                )}
+                {!!whiteboardChannels?.length && (
+                    <div className="mb-2">
+                        <ServerSection 
+                            sectionType="channels"
+                            channelType={ChannelType.WHITEBOARD}
+                            role={role}
+                            label="Whiteboard Channels"
+                            server={server}
+                        />
+                        <div className="space-y-[2px]">
+                            {whiteboardChannels.map((channel) => (
+                                <ServerChannel 
+                                    key={channel.id}
+                                    channel={channel}
+                                    role={role}
+                                    server={server}
+                                />
+                            ))}
                         </div>
                     </div>
                 )}

@@ -89,6 +89,7 @@ enum ChannelType {
   TEXT
   AUDIO
   VIDEO
+  WHITEBOARD
 }
 
 model Channel {
@@ -108,6 +109,10 @@ model Channel {
 
   Messages           Message[]
   channelPermissions ChannelPermission[] // Specific member permissions
+
+  // Whiteboard relations
+  whiteboardState        WhiteboardState?
+  whiteboardDrawCommands WhiteboardDrawCommand[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -157,10 +162,10 @@ model Message {
   channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
   deleted Boolean @default(false)
-  
+
   // Pin message feature
-  pinned Boolean @default(false)
-  pinnedAt DateTime?
+  pinned     Boolean   @default(false)
+  pinnedAt   DateTime?
   pinnedById String? // MemberId who pinned the message
 
   createdAt DateTime @default(now())
@@ -224,4 +229,49 @@ model DirectMessage {
   @@index([conversationId, deleted, createdAt(sort: Desc)]) // Filter non-deleted DMs với sort
   @@index([memberId, createdAt(sort: Desc)]) // Member's DM history
   @@index([createdAt]) // Global DM timeline
+}
+
+// Whiteboard state management
+model WhiteboardState {
+  id String @id @default(uuid())
+
+  channelId String  @unique
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  // Compressed drawing data (JSON string of draw commands)
+  drawingData String @default("[]") @db.Text
+
+  // Metadata
+  version    Int      @default(0) // For optimistic locking
+  lastEditBy String? // ProfileId of last editor
+  lastEditAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([channelId]) // Fast lookup by channel
+  @@index([lastEditAt]) // Track recent activity
+}
+
+// Individual draw commands for granular control and recovery
+model WhiteboardDrawCommand {
+  id String @id @default(uuid())
+
+  channelId String
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  // Command data
+  commandType String // "draw", "erase", "clear", "undo"
+  data        String @db.Text // JSON: {points: [[x,y]...], color, width, etc}
+  sequence    Int // Order of commands
+
+  // Author tracking
+  profileId String
+  memberId  String
+
+  createdAt DateTime @default(now())
+
+  @@index([channelId, sequence]) // Fast sequential access
+  @@index([channelId, createdAt]) // Time-based queries
+  @@index([profileId]) // Track user contributions
 }

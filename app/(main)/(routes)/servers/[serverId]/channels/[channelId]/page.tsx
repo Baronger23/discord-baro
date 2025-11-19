@@ -6,6 +6,8 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ChannelType } from "@prisma/client";
 import { MediaRoomLazy } from "@/components/media-room-lazy";
+import { Whiteboard } from "@/components/whiteboard";
+
 interface ChannelIdPageProps {
     params: Promise<{
         serverId: string;
@@ -85,6 +87,12 @@ const ChannelIdPage = async ({
                     chatId={channel.id}
                     video={true}
                     audio={true}
+                />
+            )}
+            {channel.type == ChannelType.WHITEBOARD && (
+                <Whiteboard
+                    channelId={channel.id}
+                    serverId={channel.serverId}
                 />
             )}
         </div>
