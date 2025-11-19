@@ -27,7 +27,6 @@ const nextConfig: NextConfig = {
       }
     ],
   },
-};
   // Tối ưu bundle size và code splitting
   experimental: {
     optimizePackageImports: [

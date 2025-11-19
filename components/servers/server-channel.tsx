@@ -1,7 +1,7 @@
 "use client";
 import { Channel, MemberRole, Server } from "@prisma/client";
 import { ChannelType } from "@prisma/client";
-import { Hash, Mic, Video, Trash, Edit, Lock, Settings } from "lucide-react";
+import { Hash, Mic, Video, Trash, Edit, Lock, Settings, PenTool } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ActionTooltip } from "../ui/action-tooltip";
@@ -16,6 +16,7 @@ const iconMap= {
     [ChannelType.TEXT]: Hash,
     [ChannelType.AUDIO]: Mic,
     [ChannelType.VIDEO]: Video,
+    [ChannelType.WHITEBOARD]: PenTool,
 }
 
 export const ServerChannel = ({

@@ -4,7 +4,7 @@ import type { NextApiRequest } from "next";
 import { currentProfilePages } from "@/lib/current-profile-pages";
 import { db } from "@/lib/db";
 import { Member, Profile } from "@prisma/client";
-import { channelRoom, serverRoom, SOCKET_EVENTS, SOCKET_PATH } from "./constants";
+import { channelRoom, serverRoom, whiteboardRoom, SOCKET_EVENTS, SOCKET_PATH } from "./constants";
 import type {
   ClientToServerEvents,
   InterServerEvents,
@@ -12,8 +12,11 @@ import type {
   PresenceUser,
   ServerToClientEvents,
   SocketData,
+  DrawCommand,
 } from "./types";
 import { presenceManager } from "./presence";
+import { whiteboardManager } from "./whiteboard-manager";
+import { v4 as uuidv4 } from "uuid";
 
 export type TypedIOServer = IOServer<
   ClientToServerEvents,
@@ -223,6 +226,143 @@ const registerCoreEvents = (io: TypedIOServer) => {
 
     socket.on(SOCKET_EVENTS.PRESENCE_PING, ({ channels }: PresencePingPayload) => {
       channels.forEach((channelId) => presenceManager.touch(channelId, profileId));
+    });
+
+    // ============================================
+    // WHITEBOARD EVENTS
+    // ============================================
+    
+    socket.on(SOCKET_EVENTS.WHITEBOARD_JOIN, async ({ serverId, channelId }) => {
+      try {
+        // Verify member access
+        const member = await db.member.findFirst({
+          where: {
+            serverId,
+            profileId,
+          },
+          include: {
+            profile: true,
+          },
+        });
+
+        if (!member) {
+          console.log(`[WHITEBOARD] Unauthorized join attempt: ${profileId} -> ${channelId}`);
+          return;
+        }
+
+        // Verify channel is whiteboard type
+        const channel = await db.channel.findUnique({
+          where: { id: channelId },
+        });
+
+        if (!channel || channel.type !== "WHITEBOARD") {
+          console.log(`[WHITEBOARD] Invalid channel type: ${channelId}`);
+          return;
+        }
+
+        // Join whiteboard room
+        socket.join(whiteboardRoom(channelId));
+        console.log(`[WHITEBOARD] ${member.profile.name} joined ${channelId}`);
+
+        // Load and send current state
+        const state = await whiteboardManager.loadState(channelId);
+        socket.emit(SOCKET_EVENTS.WHITEBOARD_STATE, {
+          channelId,
+          state,
+        });
+
+      } catch (error) {
+        console.error("[WHITEBOARD] Failed to join:", error);
+      }
+    });
+
+    socket.on(SOCKET_EVENTS.WHITEBOARD_LEAVE, ({ channelId }) => {
+      socket.leave(whiteboardRoom(channelId));
+      console.log(`[WHITEBOARD] ${profileId} left ${channelId}`);
+    });
+
+    socket.on(SOCKET_EVENTS.WHITEBOARD_DRAW, async ({ channelId, command: partialCommand }) => {
+      try {
+        // Create full command with server-side data
+        const fullCommand: DrawCommand = {
+          ...partialCommand,
+          id: uuidv4(),
+          timestamp: Date.now(),
+        };
+
+        // Add to state
+        whiteboardManager.addCommand(channelId, fullCommand);
+
+        // Broadcast to all users in the room (including sender for confirmation)
+        socket.to(whiteboardRoom(channelId)).emit(SOCKET_EVENTS.WHITEBOARD_DRAW, {
+          channelId,
+          command: fullCommand,
+        });
+
+        // Optional: Save individual command to database for audit/recovery
+        // This is async and non-blocking
+        db.whiteboardDrawCommand.create({
+          data: {
+            channelId,
+            commandType: fullCommand.type,
+            data: JSON.stringify(fullCommand),
+            sequence: Date.now(), // Use timestamp as sequence
+            profileId: fullCommand.profileId,
+            memberId: profileId, // Socket's member id
+          },
+        }).catch(err => {
+          console.error("[WHITEBOARD] Failed to save draw command:", err);
+        });
+
+      } catch (error) {
+        console.error("[WHITEBOARD] Failed to process draw:", error);
+      }
+    });
+
+    socket.on(SOCKET_EVENTS.WHITEBOARD_CLEAR, async ({ channelId }) => {
+      try {
+        // Clear whiteboard
+        await whiteboardManager.clearWhiteboard(channelId, profileId);
+
+        // Broadcast to all users
+        socket.to(whiteboardRoom(channelId)).emit(SOCKET_EVENTS.WHITEBOARD_CLEAR, {
+          channelId,
+          clearedBy: profileId,
+        });
+
+        // Also notify the sender
+        socket.emit(SOCKET_EVENTS.WHITEBOARD_CLEAR, {
+          channelId,
+          clearedBy: profileId,
+        });
+
+      } catch (error) {
+        console.error("[WHITEBOARD] Failed to clear:", error);
+      }
+    });
+
+    socket.on(SOCKET_EVENTS.WHITEBOARD_UNDO, async ({ channelId, commandId }) => {
+      try {
+        // Undo command
+        const updatedState = whiteboardManager.undoCommand(channelId, commandId);
+
+        if (updatedState) {
+          // Broadcast to all users
+          socket.to(whiteboardRoom(channelId)).emit(SOCKET_EVENTS.WHITEBOARD_UNDO, {
+            channelId,
+            commandId,
+          });
+
+          // Also notify the sender
+          socket.emit(SOCKET_EVENTS.WHITEBOARD_UNDO, {
+            channelId,
+            commandId,
+          });
+        }
+
+      } catch (error) {
+        console.error("[WHITEBOARD] Failed to undo:", error);
+      }
     });
 
     socket.on("disconnect", () => {
