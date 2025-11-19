@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  reactStrictMode: false, // Disable to prevent double mount/unmount with WebRTC
   images: {
     remotePatterns: [
       {
@@ -36,6 +37,7 @@ const nextConfig: NextConfig = {
       '@livekit/components-react'
     ],
   },
+  
   // Webpack optimization
   webpack: (config, { isServer }) => {
     if (!isServer) {

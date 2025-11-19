@@ -70,6 +70,48 @@ export type ServerToClientEvents = {
     senderName?: string; // Tên người gửi
   }) => void;
   
+  // WebRTC Signaling Events
+  "webrtc:offer": (payload: {
+    from: string;
+    to: string;
+    roomId: string;
+    offer: RTCSessionDescriptionInit;
+    displayName: string;
+  }) => void;
+  "webrtc:answer": (payload: {
+    from: string;
+    to: string;
+    roomId: string;
+    answer: RTCSessionDescriptionInit;
+    displayName: string;
+  }) => void;
+  "webrtc:ice-candidate": (payload: {
+    from: string;
+    to: string;
+    roomId: string;
+    candidate: {
+      candidate: string;
+      sdpMid: string | null;
+      sdpMLineIndex: number | null;
+    };
+  }) => void;
+  "webrtc:user-joined": (payload: {
+    roomId: string;
+    peerId: string;
+    displayName: string;
+    peers: Array<{ peerId: string; displayName: string }>;
+  }) => void;
+  "webrtc:user-left": (payload: {
+    roomId: string;
+    peerId: string;
+  }) => void;
+  "webrtc:media-state": (payload: {
+    roomId: string;
+    peerId: string;
+    audioEnabled?: boolean;
+    videoEnabled?: boolean;
+    screenSharing?: boolean;
+  
   // Whiteboard events (server -> client)
   "whiteboard:draw": (payload: {
     channelId: string;
@@ -112,6 +154,42 @@ export type ClientToServerEvents = {
   "presence:ping": (payload: {
     channels: string[];
   }) => void;
+ 
+  // WebRTC Signaling Events (Client to Server)
+  "webrtc:join-room": (payload: {
+    roomId: string;
+    peerId: string;
+    displayName: string;
+  }) => void;
+  "webrtc:leave-room": (payload: {
+    roomId: string;
+    peerId: string;
+  }) => void;
+  "webrtc:offer": (payload: {
+    to: string;
+    roomId: string;
+    offer: RTCSessionDescriptionInit;
+    displayName: string;
+  }) => void;
+  "webrtc:answer": (payload: {
+    to: string;
+    roomId: string;
+    answer: RTCSessionDescriptionInit;
+  }) => void;
+  "webrtc:ice-candidate": (payload: {
+    to: string;
+    roomId: string;
+    candidate: {
+      candidate: string;
+      sdpMid: string | null;
+      sdpMLineIndex: number | null;
+    };
+  }) => void;
+  "webrtc:media-state": (payload: {
+    roomId: string;
+    audioEnabled?: boolean;
+    videoEnabled?: boolean;
+    screenSharing?: boolean;
   
   // Whiteboard events (client -> server)
   "whiteboard:join": (payload: {

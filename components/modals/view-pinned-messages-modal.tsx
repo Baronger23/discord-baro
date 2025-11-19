@@ -40,23 +40,29 @@ export const ViewPinnedMessagesModal = () => {
   const router = useRouter();
 
   const isModalOpen = isOpen && type === "viewPinnedMessages";
-  const { channelId } = data;
+  const { channelId, conversationId, type: chatType = "channel" } = data;
 
   const [loading, setLoading] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState<PinnedMessage[]>([]);
 
+  const targetId = chatType === "channel" ? channelId : conversationId;
+
   useEffect(() => {
-    if (isModalOpen && channelId) {
+    if (isModalOpen && targetId) {
       fetchPinnedMessages();
     }
-  }, [isModalOpen, channelId]);
+  }, [isModalOpen, targetId]);
 
   const fetchPinnedMessages = async () => {
-    if (!channelId) return;
+    if (!targetId) return;
 
     try {
       setLoading(true);
-      const response = await axios.get(`/api/channels/${channelId}/pinned`);
+      const endpoint = chatType === "channel"
+        ? `/api/channels/${targetId}/pinned`
+        : `/api/conversations/${targetId}/pinned`;
+      
+      const response = await axios.get(endpoint);
       setPinnedMessages(response.data);
     } catch (error) {
       console.error("Failed to fetch pinned messages:", error);
@@ -67,7 +73,11 @@ export const ViewPinnedMessagesModal = () => {
 
   const handleUnpin = async (messageId: string) => {
     try {
-      await axios.delete(`/api/messages/${messageId}/pin`);
+      const endpoint = chatType === "channel"
+        ? `/api/messages/${messageId}/pin`
+        : `/api/direct-messages/${messageId}/pin`;
+      
+      await axios.delete(endpoint);
       await fetchPinnedMessages(); // Refresh list
       router.refresh();
     } catch (error) {

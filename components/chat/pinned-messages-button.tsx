@@ -7,27 +7,37 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 
 interface PinnedMessagesButtonProps {
-  channelId: string;
+  channelId?: string;
+  conversationId?: string;
+  type: "channel" | "conversation";
 }
 
-export const PinnedMessagesButton = ({ channelId }: PinnedMessagesButtonProps) => {
+export const PinnedMessagesButton = ({ channelId, conversationId, type }: PinnedMessagesButtonProps) => {
   const { onOpen } = useModal();
   const [pinnedCount, setPinnedCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
+  const targetId = type === "channel" ? channelId : conversationId;
+
   useEffect(() => {
+    if (!targetId) return;
+    
     fetchPinnedCount();
     // Poll every 10 seconds
     const interval = setInterval(fetchPinnedCount, 10000);
     return () => clearInterval(interval);
-  }, [channelId]);
+  }, [targetId]);
 
   const fetchPinnedCount = async () => {
-    if (loading) return;
+    if (loading || !targetId) return;
 
     try {
       setLoading(true);
-      const response = await axios.get(`/api/channels/${channelId}/pinned`);
+      const endpoint = type === "channel" 
+        ? `/api/channels/${targetId}/pinned`
+        : `/api/conversations/${targetId}/pinned`;
+      
+      const response = await axios.get(endpoint);
       setPinnedCount(response.data.length);
     } catch (error) {
       console.error("Failed to fetch pinned count:", error);
@@ -39,7 +49,11 @@ export const PinnedMessagesButton = ({ channelId }: PinnedMessagesButtonProps) =
   return (
     <ActionTooltip label={pinnedCount > 0 ? `${pinnedCount} Pinned Messages` : "No Pinned Messages"}>
       <button
-        onClick={() => onOpen("viewPinnedMessages", { channelId })}
+        onClick={() => onOpen("viewPinnedMessages", { 
+          channelId: type === "channel" ? channelId : undefined,
+          conversationId: type === "conversation" ? conversationId : undefined,
+          type 
+        })}
         className="relative group p-2 rounded-md hover:bg-zinc-700/10 dark:hover:bg-zinc-700/50 transition"
       >
         <Pin className="w-5 h-5 text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition" />

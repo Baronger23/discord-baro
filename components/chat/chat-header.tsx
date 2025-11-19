@@ -11,6 +11,7 @@ interface ChatHeaderProps {
     type: "channel" | "conversation";
     imageUrl?: string;
     channelId?: string;
+    conversationId?: string;
 }
 
 export const ChatHeader = ({
@@ -18,7 +19,8 @@ export const ChatHeader = ({
     name,
     type,
     imageUrl,
-    channelId
+    channelId,
+    conversationId
 }: ChatHeaderProps) => {
     
     return (
@@ -41,7 +43,10 @@ export const ChatHeader = ({
             </p>
             <div className="ml-auto flex items-center gap-x-2">
                 {type === "channel" && channelId && (
-                    <PinnedMessagesButton channelId={channelId} />
+                    <PinnedMessagesButton channelId={channelId} type="channel" />
+                )}
+                {type === "conversation" && conversationId && (
+                    <PinnedMessagesButton conversationId={conversationId} type="conversation" />
                 )}
                 {type === "conversation" && (
                   <ChatVideoButton/>  

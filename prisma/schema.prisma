@@ -213,12 +213,18 @@ model DirectMessage {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   deleted Boolean @default(false)
+  
+  // Pin message feature for direct messages
+  pinned Boolean @default(false)
+  pinnedAt DateTime?
+  pinnedById String? // MemberId who pinned the message
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([memberId]) // Lấy messages của member
   @@index([conversationId]) // Lấy messages trong conversation
+  @@index([pinned, conversationId]) // For querying pinned messages in a conversation
   @@index([conversationId, createdAt(sort: Desc)]) // Composite: Pagination DMs (CRITICAL!)
   @@index([conversationId, deleted, createdAt(sort: Desc)]) // Filter non-deleted DMs với sort
   @@index([memberId, createdAt(sort: Desc)]) // Member's DM history

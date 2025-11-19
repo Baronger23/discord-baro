@@ -222,13 +222,8 @@ export const MessageFileModal = () => {
         });
 
         try {
-            // Create a dummy file object for retry (we'll need to re-upload)
-            // Note: We can't recreate the original File object, so retry might be limited
-            // In a real app, you'd store the original file or use a different approach
-            
             alert('Retry functionality requires re-selecting the file. Please remove and re-upload.');
             
-            // Reset to error state
             setUploadedFiles(prev => {
                 const updated = [...prev];
                 updated[index] = {
@@ -325,8 +320,8 @@ export const MessageFileModal = () => {
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 flex flex-col flex-1 min-h-0">
-                        <div className="space-y-4 px-6 overflow-y-auto flex-1">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 flex flex-col flex-1 min-h-0 pointer-events-none">
+                        <div className="space-y-4 px-6 overflow-y-auto flex-1 pointer-events-auto">
                             <FormField
                                 control={form.control}
                                 name="fileUrls"
@@ -481,34 +476,39 @@ export const MessageFileModal = () => {
                                 )}
                             />
                         </div>
-                        
-                        <DialogFooter className="bg-gray-100 px-6 py-4 flex-shrink-0">
-                            <Button 
-                                disabled={isLoading || uploadedFiles.filter(f => f.status === 'completed').length === 0 || uploading} 
-                                variant="default"
-                                type="submit"
-                                onClick={() => {
-                                    const completedCount = uploadedFiles.filter(f => f.status === 'completed').length;
-                                    console.log("🔘 Send button clicked!", {
-                                        isLoading,
-                                        completedCount,
-                                        uploading,
-                                        disabled: isLoading || completedCount === 0 || uploading
-                                    });
-                                }}
-                            >
-                                {isLoading ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                        Sending {uploadedFiles.filter(f => f.status === 'completed').length} file(s)...
-                                    </>
-                                ) : (
-                                    `Send ${uploadedFiles.filter(f => f.status === 'completed').length} file${uploadedFiles.filter(f => f.status === 'completed').length > 1 ? 's' : ''}`
-                                )}
-                            </Button>
-                        </DialogFooter>
                     </form>
                 </Form>
+                
+                <DialogFooter 
+                    className="bg-gray-100 px-6 py-4 flex-shrink-0 relative z-50"
+                    style={{ pointerEvents: 'auto' }}
+                >
+                    <Button 
+                        disabled={isLoading || uploadedFiles.filter(f => f.status === 'completed').length === 0 || uploading} 
+                        variant="default"
+                        type="button"
+                        className="relative z-50 cursor-pointer"
+                        style={{ pointerEvents: 'auto' }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            console.log('Button clicked!', { isLoading, uploading, completedFiles: uploadedFiles.filter(f => f.status === 'completed').length });
+                            
+                            // Call onSubmit directly
+                            onSubmit({ fileUrls: [] });
+                        }}
+                    >
+                        {isLoading ? (
+                            <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Sending {uploadedFiles.filter(f => f.status === 'completed').length} file(s)...
+                            </>
+                        ) : (
+                            <>
+                                Send {uploadedFiles.filter(f => f.status === 'completed').length} file{uploadedFiles.filter(f => f.status === 'completed').length > 1 ? 's' : ''}
+                            </>
+                        )}
+                    </Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     );

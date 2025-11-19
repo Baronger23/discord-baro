@@ -14,6 +14,8 @@ interface ModalData {
     query?: Record<string, any>;
     messageId?: string;
     channelId?: string;
+    conversationId?: string;
+    type?: "channel" | "conversation";
 }
 
 interface ModalStore {

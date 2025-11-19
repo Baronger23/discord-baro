@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
 
@@ -29,6 +30,8 @@ interface MediaRoomLazyProps {
     audio: boolean;
 }
 
-export const MediaRoomLazy = ({ chatId, video, audio }: MediaRoomLazyProps) => {
+// Wrap với React.memo để ngăn re-render không cần thiết
+export const MediaRoomLazy = React.memo(({ chatId, video, audio }: MediaRoomLazyProps) => {
+    console.log('[MediaRoomLazy] Rendering with chatId:', chatId);
     return <MediaRoom chatId={chatId} video={video} audio={audio} />;
-};
+});
