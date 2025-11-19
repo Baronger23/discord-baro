@@ -111,6 +111,7 @@ export type ServerToClientEvents = {
     audioEnabled?: boolean;
     videoEnabled?: boolean;
     screenSharing?: boolean;
+  }) => void;
   
   // Whiteboard events (server -> client)
   "whiteboard:draw": (payload: {
@@ -190,6 +191,7 @@ export type ClientToServerEvents = {
     audioEnabled?: boolean;
     videoEnabled?: boolean;
     screenSharing?: boolean;
+  }) => void;
   
   // Whiteboard events (client -> server)
   "whiteboard:join": (payload: {

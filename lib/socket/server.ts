@@ -339,6 +339,8 @@ const registerCoreEvents = (io: TypedIOServer) => {
         videoEnabled,
         screenSharing,
       });
+    });
+    
     // ============================================
     // WHITEBOARD EVENTS
     // ============================================
