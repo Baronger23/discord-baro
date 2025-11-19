@@ -225,11 +225,135 @@ const registerCoreEvents = (io: TypedIOServer) => {
       channels.forEach((channelId) => presenceManager.touch(channelId, profileId));
     });
 
+    // WebRTC Signaling Handlers
+    socket.on("webrtc:join-room", ({ roomId, peerId, displayName }) => {
+      console.log(`[WEBRTC] User ${displayName} (${peerId}) joining room ${roomId}`);
+      
+      // Join the WebRTC room
+      const webrtcRoom = `webrtc:${roomId}`;
+      socket.join(webrtcRoom);
+
+      // Get existing peers in the room
+      const room = io.sockets.adapter.rooms.get(webrtcRoom);
+      const existingPeers: Array<{ peerId: string; displayName: string }> = [];
+      
+      if (room) {
+        room.forEach((socketId) => {
+          const peerSocket = io.sockets.sockets.get(socketId);
+          if (peerSocket && peerSocket.id !== socket.id) {
+            const peerData = peerSocket.data;
+            existingPeers.push({
+              peerId: socketId,
+              displayName: peerData.displayName || "Unknown",
+            });
+          }
+        });
+      }
+
+      // Send existing peers to the new user
+      socket.emit("webrtc:user-joined", {
+        roomId,
+        peerId: socket.id,
+        displayName,
+        peers: existingPeers,
+      });
+
+      // Notify existing peers about the new user
+      socket.to(webrtcRoom).emit("webrtc:user-joined", {
+        roomId,
+        peerId: socket.id,
+        displayName,
+        peers: [],
+      });
+
+      console.log(`[WEBRTC] User ${displayName} joined room ${roomId}, found ${existingPeers.length} existing peers`);
+    });
+
+    socket.on("webrtc:leave-room", ({ roomId, peerId }) => {
+      console.log(`[WEBRTC] User ${peerId} leaving room ${roomId}`);
+      const webrtcRoom = `webrtc:${roomId}`;
+      
+      // Notify others in the room
+      socket.to(webrtcRoom).emit("webrtc:user-left", {
+        roomId,
+        peerId: socket.id,
+      });
+
+      // Leave the room
+      socket.leave(webrtcRoom);
+    });
+
+    socket.on("webrtc:offer", ({ to, roomId, offer, displayName }) => {
+      console.log(`[WEBRTC] Relaying offer from ${socket.id} to ${to} in room ${roomId}`);
+      
+      // Relay the offer to the target peer
+      io.to(to).emit("webrtc:offer", {
+        from: socket.id,
+        to,
+        roomId,
+        offer,
+        displayName,
+      });
+    });
+
+    socket.on("webrtc:answer", ({ to, roomId, answer }) => {
+      console.log(`[WEBRTC] Relaying answer from ${socket.id} to ${to} in room ${roomId}`);
+      
+      // Get answerer's display name from socket data
+      const answerDisplayName = socket.data.displayName || "Unknown";
+      
+      // Relay the answer to the target peer
+      io.to(to).emit("webrtc:answer", {
+        from: socket.id,
+        to,
+        roomId,
+        answer,
+        displayName: answerDisplayName,
+      });
+    });
+
+    socket.on("webrtc:ice-candidate", ({ to, roomId, candidate }) => {
+      console.log(`[WEBRTC] Relaying ICE candidate from ${socket.id} to ${to}`);
+      
+      // Relay the ICE candidate to the target peer
+      io.to(to).emit("webrtc:ice-candidate", {
+        from: socket.id,
+        to,
+        roomId,
+        candidate,
+      });
+    });
+
+    socket.on("webrtc:media-state", ({ roomId, audioEnabled, videoEnabled, screenSharing }) => {
+      console.log(`[WEBRTC] Broadcasting media state change from ${socket.id} in room ${roomId}`);
+      
+      const webrtcRoom = `webrtc:${roomId}`;
+      // Broadcast to all other users in the room
+      socket.to(webrtcRoom).emit("webrtc:media-state", {
+        roomId,
+        peerId: socket.id,
+        audioEnabled,
+        videoEnabled,
+        screenSharing,
+      });
+    });
+
     socket.on("disconnect", () => {
       presenceManager.removeProfile(profileId);
       socket.data.channelIds.forEach((channelId) => {
         const payload = buildPresencePayload(channelId);
         socket.to(channelRoom(channelId)).emit(SOCKET_EVENTS.PRESENCE_UPDATE, payload);
+      });
+
+      // Notify WebRTC rooms about disconnection
+      socket.rooms.forEach((roomName) => {
+        if (roomName.startsWith("webrtc:")) {
+          const roomId = roomName.replace("webrtc:", "");
+          socket.to(roomName).emit("webrtc:user-left", {
+            roomId,
+            peerId: socket.id,
+          });
+        }
       });
     });
   });

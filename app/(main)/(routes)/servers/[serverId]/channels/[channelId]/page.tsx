@@ -73,6 +73,7 @@ const ChannelIdPage = async ({
             )}
             {channel.type == ChannelType.AUDIO && (
                 <MediaRoomLazy
+                    key={channel.id}
                     chatId={channel.id}
                     video={false}
                     audio={true}
@@ -80,6 +81,7 @@ const ChannelIdPage = async ({
             )}
             {channel.type == ChannelType.VIDEO && (
                 <MediaRoomLazy
+                    key={channel.id}
                     chatId={channel.id}
                     video={true}
                     audio={true}

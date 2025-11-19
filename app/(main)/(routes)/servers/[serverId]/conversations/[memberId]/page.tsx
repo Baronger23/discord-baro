@@ -11,9 +11,9 @@ interface MemberIdPage {
         memberId: string;
         serverId: string;
     }>
-    searchParams: {
+    searchParams: Promise<{
         video?: string;
-    }
+    }>
 }
 
 const MemberIdPage = async ({
@@ -28,6 +28,7 @@ const MemberIdPage = async ({
 
     // Await params in Next.js 14+
     const { serverId, memberId } = await params;
+    const { video } = await searchParams;
 
     const currentMeber = await db.member.findFirst({
         where: {
@@ -61,14 +62,15 @@ const MemberIdPage = async ({
                 type="conversation"
                 conversationId={conversation.id}
             />
-            {searchParams.video && (
+            {video && (
                 <MediaRoom
+                    key={`video-${conversation.id}`}
                     chatId={conversation.id}
                     video={true}
                     audio={true}
                 />
             )}
-            {!searchParams.video && (
+            {!video && (
                 <>
                     <ChatMessages
                         member={currentMeber}
