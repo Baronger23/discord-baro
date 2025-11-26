@@ -17,6 +17,10 @@ export const NavigationItem = ({
 }: NavigationItemProps) => {
     const params = useParams();
     const router = useRouter();
+    
+    // Check if it's a dicebear SVG (external API)
+    const isDicebearSvg = imageUrl?.includes('dicebear.com') && imageUrl?.includes('.svg');
+    
     const onClick = () => {
         router.push(`/servers/${id}`);
     };
@@ -27,6 +31,7 @@ export const NavigationItem = ({
             label={name}
         >
             <button
+                title="{name}"
                 onClick={onClick}
                 className="group flex items-center relative"
             >
@@ -42,8 +47,10 @@ export const NavigationItem = ({
                 )}>
                     <Image
                         fill
+                        sizes="48px"
                         src={imageUrl}
-                        alt="Channel"
+                        alt={name}
+                        unoptimized={isDicebearSvg}
                     />
                 </div>
             </button>

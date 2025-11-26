@@ -71,6 +71,7 @@ export const ChatMessages = ({
         loadMore: fetchNextPage,
         shouldLoadMore: !isFetchingNextPage && !!hasNextPage,
         count: data?.pages?.[0]?.items?.length ?? 0,
+        chatKey: paramValue, // Use paramValue (channelId) to detect channel changes
     });
 
     if (status === "pending") {
@@ -97,11 +98,25 @@ export const ChatMessages = ({
 
     return (
         <div className="flex-1 flex flex-col py-4 overflow-y-auto" ref={chatRef}>
-            <div className="flex-1"/>
             <ChatWelcome
                 type={type}
                 name={name}
             />
+            {!hasNextPage && <div className="flex-1"/>}
+            {hasNextPage && (
+                <div className="flex justify-center">
+                    {isFetchingNextPage ? (
+                        <Loader2 className="h-6 w-6 text-zinc-500 animate-spin my-4" />
+                    ) : (
+                        <button
+                            onClick={() => fetchNextPage()}
+                            className="text-zinc-500 hover:text-zinc-600 dark:text-zinc-400 text-xs my-4 hover:underline transition"
+                        >
+                            Load previous messages
+                        </button>
+                    )}
+                </div>
+            )}
             <div className="flex flex-col-reverse mt-auto">
                 {data?.pages?.map((group, i) => (
                     <Fragment key={i}>
@@ -115,9 +130,17 @@ export const ChatMessages = ({
                                 fileUrl={message.fileUrl}
                                 deleted={message.deleted}
                                 timestamp={format(new Date(message.createdAt), DATE_FORMAT)}
-                                isUpdated={message.updatedAt !== message.createdAt}
+                                isUpdated={
+                                    message.updatedAt !== message.createdAt && 
+                                    // Don't show "edited" if update was just for pinning
+                                    (!message.pinnedAt || 
+                                     Math.abs(new Date(message.updatedAt).getTime() - new Date(message.pinnedAt).getTime()) > 1000)
+                                }
                                 socketUrl={socketUrl}
                                 socketQuery={socketQuery}
+                                pinned={message.pinned}
+                                pinnedAt={message.pinnedAt}
+                                type={type}
                             />
                         ))}
                     </Fragment>

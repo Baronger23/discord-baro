@@ -4,6 +4,7 @@ import type { NextApiRequest } from 'next';
 import type { NextApiResponseServerIo } from '@/type';
 import { emitChannelMessage } from '@/lib/socket/server';
 import { MemberRole } from '@prisma/client';
+import { canSendMessages, canManageMessages } from '@/lib/channel-permissions';
 
 export default async function handler (
     req: NextApiRequest,
@@ -66,6 +67,12 @@ export default async function handler (
 
             if (!member) {
                 return res.status(403).json({ error : "You are not a member of this server" });
+            }
+
+            // Check if member can send messages in this channel
+            const hasPermission = await canSendMessages(member.id, channel.id);
+            if (!hasPermission) {
+                return res.status(403).json({ error: "You don't have permission to send messages in this channel" });
             }
 
             const message = await db.message.create({
@@ -195,7 +202,10 @@ export default async function handler (
             const isMessageOwner = message.memberId === member.id;
             const isAdmin = member.role === MemberRole.ADMIN;
             const isModerator = member.role === MemberRole.MODERATOR;
-            const canModify = isMessageOwner || isAdmin || isModerator;
+            
+            // For DELETE/EDIT: Check manage messages permission
+            const hasManagePermission = await canManageMessages(member.id, channel.id);
+            const canModify = isMessageOwner || hasManagePermission;
 
             if (!canModify) {
                 return res.status(401).json({ error: "Unauthorized" });

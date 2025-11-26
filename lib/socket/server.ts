@@ -4,7 +4,7 @@ import type { NextApiRequest } from "next";
 import { currentProfilePages } from "@/lib/current-profile-pages";
 import { db } from "@/lib/db";
 import { Member, Profile } from "@prisma/client";
-import { channelRoom, serverRoom, SOCKET_EVENTS, SOCKET_PATH } from "./constants";
+import { channelRoom, serverRoom, whiteboardRoom, SOCKET_EVENTS, SOCKET_PATH } from "./constants";
 import type {
   ClientToServerEvents,
   InterServerEvents,
@@ -12,8 +12,11 @@ import type {
   PresenceUser,
   ServerToClientEvents,
   SocketData,
+  DrawCommand,
 } from "./types";
 import { presenceManager } from "./presence";
+import { whiteboardManager } from "./whiteboard-manager";
+import { v4 as uuidv4 } from "uuid";
 
 export type TypedIOServer = IOServer<
   ClientToServerEvents,
@@ -225,15 +228,276 @@ const registerCoreEvents = (io: TypedIOServer) => {
       channels.forEach((channelId) => presenceManager.touch(channelId, profileId));
     });
 
+    // WebRTC Signaling Handlers
+    socket.on("webrtc:join-room", ({ roomId, peerId, displayName }) => {
+      console.log(`[WEBRTC] User ${displayName} (${peerId}) joining room ${roomId}`);
+      
+      // Join the WebRTC room
+      const webrtcRoom = `webrtc:${roomId}`;
+      socket.join(webrtcRoom);
+
+      // Get existing peers in the room
+      const room = io.sockets.adapter.rooms.get(webrtcRoom);
+      const existingPeers: Array<{ peerId: string; displayName: string }> = [];
+      
+      if (room) {
+        room.forEach((socketId) => {
+          const peerSocket = io.sockets.sockets.get(socketId);
+          if (peerSocket && peerSocket.id !== socket.id) {
+            const peerData = peerSocket.data;
+            existingPeers.push({
+              peerId: socketId,
+              displayName: peerData.displayName || "Unknown",
+            });
+          }
+        });
+      }
+
+      // Send existing peers to the new user
+      socket.emit("webrtc:user-joined", {
+        roomId,
+        peerId: socket.id,
+        displayName,
+        peers: existingPeers,
+      });
+
+      // Notify existing peers about the new user
+      socket.to(webrtcRoom).emit("webrtc:user-joined", {
+        roomId,
+        peerId: socket.id,
+        displayName,
+        peers: [],
+      });
+
+      console.log(`[WEBRTC] User ${displayName} joined room ${roomId}, found ${existingPeers.length} existing peers`);
+    });
+
+    socket.on("webrtc:leave-room", ({ roomId, peerId }) => {
+      console.log(`[WEBRTC] User ${peerId} leaving room ${roomId}`);
+      const webrtcRoom = `webrtc:${roomId}`;
+      
+      // Notify others in the room
+      socket.to(webrtcRoom).emit("webrtc:user-left", {
+        roomId,
+        peerId: socket.id,
+      });
+
+      // Leave the room
+      socket.leave(webrtcRoom);
+    });
+
+    socket.on("webrtc:offer", ({ to, roomId, offer, displayName }) => {
+      console.log(`[WEBRTC] Relaying offer from ${socket.id} to ${to} in room ${roomId}`);
+      
+      // Relay the offer to the target peer
+      io.to(to).emit("webrtc:offer", {
+        from: socket.id,
+        to,
+        roomId,
+        offer,
+        displayName,
+      });
+    });
+
+    socket.on("webrtc:answer", ({ to, roomId, answer }) => {
+      console.log(`[WEBRTC] Relaying answer from ${socket.id} to ${to} in room ${roomId}`);
+      
+      // Get answerer's display name from socket data
+      const answerDisplayName = socket.data.displayName || "Unknown";
+      
+      // Relay the answer to the target peer
+      io.to(to).emit("webrtc:answer", {
+        from: socket.id,
+        to,
+        roomId,
+        answer,
+        displayName: answerDisplayName,
+      });
+    });
+
+    socket.on("webrtc:ice-candidate", ({ to, roomId, candidate }) => {
+      console.log(`[WEBRTC] Relaying ICE candidate from ${socket.id} to ${to}`);
+      
+      // Relay the ICE candidate to the target peer
+      io.to(to).emit("webrtc:ice-candidate", {
+        from: socket.id,
+        to,
+        roomId,
+        candidate,
+      });
+    });
+
+    socket.on("webrtc:media-state", ({ roomId, audioEnabled, videoEnabled, screenSharing }) => {
+      console.log(`[WEBRTC] Broadcasting media state change from ${socket.id} in room ${roomId}`);
+      
+      const webrtcRoom = `webrtc:${roomId}`;
+      // Broadcast to all other users in the room
+      socket.to(webrtcRoom).emit("webrtc:media-state", {
+        roomId,
+        peerId: socket.id,
+        audioEnabled,
+        videoEnabled,
+        screenSharing,
+      });
+    });
+    // ============================================
+    // WHITEBOARD EVENTS
+    // ============================================
+    
+    socket.on(SOCKET_EVENTS.WHITEBOARD_JOIN, async ({ serverId, channelId }) => {
+      try {
+        // Verify member access
+        const member = await db.member.findFirst({
+          where: {
+            serverId,
+            profileId,
+          },
+          include: {
+            profile: true,
+          },
+        });
+
+        if (!member) {
+          console.log(`[WHITEBOARD] Unauthorized join attempt: ${profileId} -> ${channelId}`);
+          return;
+        }
+
+        // Verify channel is whiteboard type
+        const channel = await db.channel.findUnique({
+          where: { id: channelId },
+        });
+
+        if (!channel || channel.type !== "WHITEBOARD") {
+          console.log(`[WHITEBOARD] Invalid channel type: ${channelId}`);
+          return;
+        }
+
+        // Join whiteboard room
+        socket.join(whiteboardRoom(channelId));
+        console.log(`[WHITEBOARD] ${member.profile.name} joined ${channelId}`);
+
+        // Load and send current state
+        const state = await whiteboardManager.loadState(channelId);
+        socket.emit(SOCKET_EVENTS.WHITEBOARD_STATE, {
+          channelId,
+          state,
+        });
+
+      } catch (error) {
+        console.error("[WHITEBOARD] Failed to join:", error);
+      }
+    });
+
+    socket.on(SOCKET_EVENTS.WHITEBOARD_LEAVE, ({ channelId }) => {
+      socket.leave(whiteboardRoom(channelId));
+      console.log(`[WHITEBOARD] ${profileId} left ${channelId}`);
+    });
+
+    socket.on(SOCKET_EVENTS.WHITEBOARD_DRAW, async ({ channelId, command: partialCommand }) => {
+      try {
+        // Create full command with server-side data
+        const fullCommand: DrawCommand = {
+          ...partialCommand,
+          id: uuidv4(),
+          timestamp: Date.now(),
+        };
+
+        // Add to state
+        whiteboardManager.addCommand(channelId, fullCommand);
+
+        // Broadcast to all users in the room (including sender for confirmation)
+        socket.to(whiteboardRoom(channelId)).emit(SOCKET_EVENTS.WHITEBOARD_DRAW, {
+          channelId,
+          command: fullCommand,
+        });
+
+        // Optional: Save individual command to database for audit/recovery
+        // This is async and non-blocking
+        db.whiteboardDrawCommand.create({
+          data: {
+            channelId,
+            commandType: fullCommand.type,
+            data: JSON.stringify(fullCommand),
+            sequence: Date.now(), // Use timestamp as sequence
+            profileId: fullCommand.profileId,
+            memberId: profileId, // Socket's member id
+          },
+        }).catch(err => {
+          console.error("[WHITEBOARD] Failed to save draw command:", err);
+        });
+
+      } catch (error) {
+        console.error("[WHITEBOARD] Failed to process draw:", error);
+      }
+    });
+
+    socket.on(SOCKET_EVENTS.WHITEBOARD_CLEAR, async ({ channelId }) => {
+      try {
+        // Clear whiteboard
+        await whiteboardManager.clearWhiteboard(channelId, profileId);
+
+        // Broadcast to all users
+        socket.to(whiteboardRoom(channelId)).emit(SOCKET_EVENTS.WHITEBOARD_CLEAR, {
+          channelId,
+          clearedBy: profileId,
+        });
+
+        // Also notify the sender
+        socket.emit(SOCKET_EVENTS.WHITEBOARD_CLEAR, {
+          channelId,
+          clearedBy: profileId,
+        });
+
+      } catch (error) {
+        console.error("[WHITEBOARD] Failed to clear:", error);
+      }
+    });
+
+    socket.on(SOCKET_EVENTS.WHITEBOARD_UNDO, async ({ channelId, commandId }) => {
+      try {
+        // Undo command
+        const updatedState = whiteboardManager.undoCommand(channelId, commandId);
+
+        if (updatedState) {
+          // Broadcast to all users
+          socket.to(whiteboardRoom(channelId)).emit(SOCKET_EVENTS.WHITEBOARD_UNDO, {
+            channelId,
+            commandId,
+          });
+
+          // Also notify the sender
+          socket.emit(SOCKET_EVENTS.WHITEBOARD_UNDO, {
+            channelId,
+            commandId,
+          });
+        }
+
+      } catch (error) {
+        console.error("[WHITEBOARD] Failed to undo:", error);
+      }
+    });
+
     socket.on("disconnect", () => {
       presenceManager.removeProfile(profileId);
       socket.data.channelIds.forEach((channelId) => {
         const payload = buildPresencePayload(channelId);
         socket.to(channelRoom(channelId)).emit(SOCKET_EVENTS.PRESENCE_UPDATE, payload);
       });
+
+      // Notify WebRTC rooms about disconnection
+      socket.rooms.forEach((roomName) => {
+        if (roomName.startsWith("webrtc:")) {
+          const roomId = roomName.replace("webrtc:", "");
+          socket.to(roomName).emit("webrtc:user-left", {
+            roomId,
+            peerId: socket.id,
+          });
+        }
+      });
     });
   });
 };
+
 
 export const initSocketServer = (httpServer: NetServer): TypedIOServer => {
   if (ioInstance) {

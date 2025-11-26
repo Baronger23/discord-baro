@@ -14,37 +14,41 @@ datasource db {
 }
 
 model Profile {
-  id String @id @default(uuid())
-  userId String @unique
-  name String
+  id       String @id @default(uuid())
+  userId   String @unique
+  name     String
   imageUrl String @db.Text
-  email String @db.Text
+  email    String @db.Text
 
-  servers Server[]
-  members Member[]
+  servers  Server[]
+  members  Member[]
   channels Channel[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userId]) // Tìm profile bằng Clerk userId
+  @@index([email]) // Search/filter by email
 }
 
-
 model Server {
-  id String @id @default(uuid())
-  name String
-  imageUrl String @db.Text
+  id         String @id @default(uuid())
+  name       String
+  imageUrl   String @db.Text
   inviteCode String @unique
 
-  profileId String 
-  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
-  members Member[]
+  members  Member[]
   channels Channel[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([profileId])
+  @@index([profileId]) // Lấy servers của user
+  @@index([inviteCode]) // Join server bằng invite code
+  @@index([createdAt]) // Sort servers by creation date
 }
 
 enum MemberRole {
@@ -54,111 +58,220 @@ enum MemberRole {
 }
 
 model Member {
-  id String @id @default(uuid())
+  id   String     @id @default(uuid())
   role MemberRole @default(GUEST)
 
-  profileId String 
-  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
-  serverId String 
-  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  serverId String
+  server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
 
-  messages Message[]
-  directMessages DirectMessage[] 
+  messages           Message[]
+  directMessages     DirectMessage[]
+  channelPermissions ChannelPermission[] // Specific channel permissions
 
   conversationInitiated Conversation[] @relation("MemberOne")
-  conversationReceived Conversation[] @relation("MemberTwo")
+  conversationReceived  Conversation[] @relation("MemberTwo")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([profileId])
-  @@index([serverId])
+  @@unique([serverId, profileId]) // Một profile chỉ có 1 member trong server
+  @@index([profileId]) // Lấy members của profile
+  @@index([serverId]) // Lấy members trong server
+  @@index([serverId, profileId]) // Composite: Tìm member cụ thể trong server (QUAN TRỌNG)
+  @@index([serverId, role]) // Filter members by role trong server
+  @@index([createdAt]) // Sort members by join date
 }
 
 enum ChannelType {
   TEXT
   AUDIO
   VIDEO
+  WHITEBOARD
 }
 
 model Channel {
-  id String @id @default(uuid())
-  name String 
+  id   String      @id @default(uuid())
+  name String
   type ChannelType @default(TEXT)
 
-  profileId String 
-  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  // Channel visibility and access control
+  isPrivate    Boolean      @default(false) // Private channels require explicit permission
+  allowedRoles MemberRole[] @default([ADMIN, MODERATOR, GUEST]) // Roles allowed to access
+
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   serverId String
-  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
 
-  Messages Message[]
-  
+  Messages           Message[]
+  channelPermissions ChannelPermission[] // Specific member permissions
+
+  // Whiteboard relations
+  whiteboardState        WhiteboardState?
+  whiteboardDrawCommands WhiteboardDrawCommand[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([serverId])
-  @@index([profileId])
+  @@index([serverId]) // Lấy channels trong server (QUAN TRỌNG)
+  @@index([profileId]) // Lấy channels tạo bởi profile
+  @@index([serverId, type]) // Filter channels by type trong server
+  @@index([serverId, isPrivate]) // Filter private/public channels
+  @@index([createdAt]) // Sort channels by creation date
+}
+
+// Channel-specific permissions for individual members
+model ChannelPermission {
+  id String @id @default(uuid())
+
+  channelId String
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  memberId String
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  canView           Boolean @default(true)
+  canSendMessages   Boolean @default(true)
+  canManageMessages Boolean @default(false) // Delete/edit others' messages
+  canInviteMembers  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([channelId, memberId]) // Một member chỉ có 1 permission set cho channel
+  @@index([channelId]) // Lấy permissions của channel
+  @@index([memberId]) // Lấy permissions của member
+  @@index([channelId, memberId]) // Composite: Check permission cụ thể (QUAN TRỌNG)
+  @@index([channelId, canView]) // Filter members có thể view channel
 }
 
 model Message {
-  id String @id @default(uuid())
+  id      String @id @default(uuid())
   content String @db.Text
 
   fileUrl String? @db.Text
 
   memberId String
-  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
-  channelId String 
-  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channelId String
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
   deleted Boolean @default(false)
+
+  // Pin message feature
+  pinned     Boolean   @default(false)
+  pinnedAt   DateTime?
+  pinnedById String? // MemberId who pinned the message
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([channelId])
-  @@index([memberId])
+  @@index([channelId]) // Lấy messages trong channel
+  @@index([memberId]) // Lấy messages của member
+  @@index([pinned, channelId]) // For querying pinned messages in a channel
+  @@index([channelId, createdAt(sort: Desc)]) // Composite: Pagination messages (CRITICAL!)
+  @@index([channelId, deleted, createdAt(sort: Desc)]) // Filter non-deleted messages với sort
+  @@index([memberId, createdAt(sort: Desc)]) // Member's message history
+  @@index([createdAt]) // Global message timeline
 }
 
 model Conversation {
   id String @id @default(uuid())
 
   memberOneId String
-  memberOne Member @relation("MemberOne", fields: [memberOneId], references: [id], onDelete: Cascade)
+  memberOne   Member @relation("MemberOne", fields: [memberOneId], references: [id], onDelete: Cascade)
 
   memberTwoId String
-  memberTwo Member @relation("MemberTwo", fields: [memberTwoId], references: [id], onDelete: Cascade)
+  memberTwo   Member @relation("MemberTwo", fields: [memberTwoId], references: [id], onDelete: Cascade)
 
   directMessages DirectMessage[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([memberTwoId])
-
-  @@unique([memberOneId, memberTwoId])
+  @@unique([memberOneId, memberTwoId]) // Đảm bảo unique conversation
+  @@index([memberOneId]) // Lấy conversations của memberOne
+  @@index([memberTwoId]) // Lấy conversations của memberTwo
+  @@index([memberOneId, memberTwoId]) // Composite: Find specific conversation (QUAN TRỌNG)
+  @@index([createdAt]) // Sort conversations by creation
 }
 
 model DirectMessage {
-  id String @id @default(uuid())
-  content String @db.Text
+  id      String  @id @default(uuid())
+  content String  @db.Text
   fileUrl String? @db.Text
 
   memberId String
-  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
   conversationId String
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   deleted Boolean @default(false)
+  
+  // Pin message feature for direct messages
+  pinned Boolean @default(false)
+  pinnedAt DateTime?
+  pinnedById String? // MemberId who pinned the message
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([memberId])
-  @@index([conversationId])
+  @@index([memberId]) // Lấy messages của member
+  @@index([conversationId]) // Lấy messages trong conversation
+  @@index([pinned, conversationId]) // For querying pinned messages in a conversation
+  @@index([conversationId, createdAt(sort: Desc)]) // Composite: Pagination DMs (CRITICAL!)
+  @@index([conversationId, deleted, createdAt(sort: Desc)]) // Filter non-deleted DMs với sort
+  @@index([memberId, createdAt(sort: Desc)]) // Member's DM history
+  @@index([createdAt]) // Global DM timeline
+}
+
+// Whiteboard state management
+model WhiteboardState {
+  id String @id @default(uuid())
+
+  channelId String  @unique
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  // Compressed drawing data (JSON string of draw commands)
+  drawingData String @default("[]") @db.Text
+
+  // Metadata
+  version    Int      @default(0) // For optimistic locking
+  lastEditBy String? // ProfileId of last editor
+  lastEditAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([channelId]) // Fast lookup by channel
+  @@index([lastEditAt]) // Track recent activity
+}
+
+// Individual draw commands for granular control and recovery
+model WhiteboardDrawCommand {
+  id String @id @default(uuid())
+
+  channelId String
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  // Command data
+  commandType String // "draw", "erase", "clear", "undo"
+  data        String @db.Text // JSON: {points: [[x,y]...], color, width, etc}
+  sequence    Int // Order of commands
+
+  // Author tracking
+  profileId String
+  memberId  String
+
+  createdAt DateTime @default(now())
+
+  @@index([channelId, sequence]) // Fast sequential access
+  @@index([channelId, createdAt]) // Time-based queries
+  @@index([profileId]) // Track user contributions
 }
