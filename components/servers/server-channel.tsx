@@ -1,7 +1,7 @@
 "use client";
 import { Channel, MemberRole, Server } from "@prisma/client";
 import { ChannelType } from "@prisma/client";
-import { Hash, Mic, Video, Trash, Edit, Lock, Settings, PenTool } from "lucide-react";
+import { Hash, Mic, Video, Trash, Edit, Lock, Settings, PenTool, type LucideIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ActionTooltip } from "../ui/action-tooltip";
@@ -12,7 +12,7 @@ interface ServerChannelProps {
     role?: MemberRole;
 }
 
-const iconMap= {
+const iconMap: Record<ChannelType, LucideIcon> = {
     [ChannelType.TEXT]: Hash,
     [ChannelType.AUDIO]: Mic,
     [ChannelType.VIDEO]: Video,
@@ -28,7 +28,7 @@ export const ServerChannel = ({
     const params = useParams();
     const router = useRouter();
 
-    const Icon = iconMap[channel.type];
+    const Icon = iconMap[channel.type as ChannelType];
     
     const onClick = () => {
         router.push(`/servers/${server.id}/channels/${channel.id}`);

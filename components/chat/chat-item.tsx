@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, memo } from "react";
+import type { ReactNode } from "react";
 import { Member, MemberRole, Profile } from "@prisma/client";
 import { UserAvatar } from "@/components/user-avatar";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
@@ -52,11 +53,11 @@ interface ChatItemProps {
     type?: "channel" | "conversation"; // To determine API endpoint
 }
 
-const roleIconMap = {
-    "GUEST": null,
-    "MODERATOR": <ShieldCheck className="h-4 w-4 ml-2 text-indigo-500" />,
-    "ADMIN": <ShieldAlert className="h-4 w-4 ml-2 text-rose-500" />
-}
+const roleIconMap: Record<MemberRole, ReactNode> = {
+    [MemberRole.GUEST]: null,
+    [MemberRole.MODERATOR]: <ShieldCheck className="h-4 w-4 ml-2 text-indigo-500" />,
+    [MemberRole.ADMIN]: <ShieldAlert className="h-4 w-4 ml-2 text-rose-500" />
+};
 
 const formSchema = z.object({
     content: z.string().min(1)
@@ -219,7 +220,7 @@ const ChatItemComponent = ({
                             {member.profile.name}
                         </p>
                         <ActionTooltip label={member.role}>
-                            {roleIconMap[member.role]}
+                            {roleIconMap[member.role as MemberRole]}
                         </ActionTooltip>
                     </div>
                     <span className="text-xs text-zinc-500 dark:text-zinc-400">

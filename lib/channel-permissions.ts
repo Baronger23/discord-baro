@@ -18,6 +18,10 @@ export interface MemberWithRole extends Member {
   role: MemberRole;
 }
 
+type ChannelWithPermissionRecords = Channel & {
+  channelPermissions: ChannelPermission[];
+};
+
 /**
  * Check if a member can view a specific channel
  */
@@ -160,7 +164,7 @@ export async function canManageMessages(
 export async function getAccessibleChannels(
   memberId: string,
   serverId: string
-) {
+): Promise<ChannelWithPermissionRecords[]> {
   try {
     const member = await db.member.findFirst({
       where: {
@@ -176,11 +180,11 @@ export async function getAccessibleChannels(
       return db.channel.findMany({
         where: { serverId },
         orderBy: { createdAt: "asc" }
-      });
+      }) as unknown as ChannelWithPermissionRecords[];
     }
 
     // Get all channels in server
-    const allChannels = await db.channel.findMany({
+    const allChannels: ChannelWithPermissionRecords[] = await db.channel.findMany({
       where: { serverId },
       include: {
         channelPermissions: {
@@ -188,10 +192,10 @@ export async function getAccessibleChannels(
         }
       },
       orderBy: { createdAt: "asc" }
-    });
+    }) as unknown as ChannelWithPermissionRecords[];
 
     // Filter channels based on permissions
-    const accessibleChannels = allChannels.filter(channel => {
+    const accessibleChannels = allChannels.filter((channel: ChannelWithPermissionRecords) => {
       // Private channel - check specific permission
       if (channel.isPrivate) {
         const permission = channel.channelPermissions[0];

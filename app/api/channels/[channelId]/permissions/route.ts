@@ -58,7 +58,7 @@ export async function GET(
       channelId: channel.id,
       isPrivate: channel.isPrivate,
       allowedRoles: channel.allowedRoles,
-      permissions: channel.channelPermissions.map(p => ({
+      permissions: channel.channelPermissions.map((p: any) => ({
         id: p.id,
         memberId: p.memberId,
         memberName: p.member.profile.name,

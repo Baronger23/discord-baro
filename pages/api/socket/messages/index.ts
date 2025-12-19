@@ -63,7 +63,7 @@ export default async function handler (
             if (!channel) {
                 return res.status(404).json({ error : "Channel not found" });
             }
-            const member = server.members.find((member) => member.profileId === profile.id);
+            const member = server.members.find((member: { profileId: string; id: string; role: MemberRole; serverId: string }) => member.profileId === profile.id);
 
             if (!member) {
                 return res.status(403).json({ error : "You are not a member of this server" });
@@ -172,7 +172,7 @@ export default async function handler (
             }
 
             // Find member
-            const member = server.members.find((member) => member.profileId === profile.id);
+            const member = server.members.find((member: { profileId: string; id: string; role: MemberRole; serverId: string }) => member.profileId === profile.id);
 
             if (!member) {
                 return res.status(404).json({ error: "Member not found" });

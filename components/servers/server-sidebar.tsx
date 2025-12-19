@@ -1,8 +1,9 @@
 import { currentProfile } from "@/lib/current-profile";
-import { ChannelType, Channel, Member, Profile, MemberRole } from "@prisma/client";
+import { ChannelType, type Channel, type Member, type Profile, MemberRole } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Hash, Scroll, Server, Video, Mic, ShieldCheck, ShieldAlert, Lock, PenTool } from "lucide-react";
+import type { ReactNode } from "react";
 import { ServerHeader } from "./server-header";
 import { ScrollArea } from "../ui/scroll-area";
 import { ServerSearch } from "./sever-search";
@@ -15,14 +16,14 @@ interface ServerSidebarProps {
     serverId?: string;
 }
 
-const iconMap= {
+const iconMap: Record<ChannelType, ReactNode> = {
     [ChannelType.TEXT]: <Hash className="mr-2 h-4 w-4" />,
     [ChannelType.AUDIO]: <Mic className="mr-2 h-4 w-4" />,
     [ChannelType.VIDEO]: <Video className="mr-2 h-4 w-4" />,
     [ChannelType.WHITEBOARD]: <PenTool className="mr-2 h-4 w-4" />,
 }
 
-const roleIconMap= {
+const roleIconMap: Record<MemberRole, ReactNode> = {
     [MemberRole.GUEST]: null,
     [MemberRole.MODERATOR]: <ShieldCheck className="mr-2 h-4 ml-2 text-indigo-500" />,
     [MemberRole.ADMIN]: <ShieldAlert className="mr-2 h-4 ml-2 text-rose-500" />,
@@ -61,7 +62,7 @@ export const ServerSidebar = async ({
     }
 
     // Get current member
-    const currentMember = server.members.find((member) => member.profileId === profile.id);
+    const currentMember = server.members.find((member: Member & { profile?: Profile }) => member.profileId === profile.id);
     if (!currentMember) {
         return redirect("/");
     }
@@ -69,10 +70,10 @@ export const ServerSidebar = async ({
     // Filter channels by permissions
     const accessibleChannels = await getAccessibleChannels(currentMember.id, server.id);
     
-    const textChannels = accessibleChannels.filter((channel) => channel.type === ChannelType.TEXT);
-    const audioChannels = accessibleChannels.filter((channel) => channel.type === ChannelType.AUDIO);
-    const videoChannels = accessibleChannels.filter((channel) => channel.type === ChannelType.VIDEO);
-    const whiteboardChannels = accessibleChannels.filter((channel) => channel.type === ChannelType.WHITEBOARD);
+    const textChannels = accessibleChannels.filter((channel: Channel) => channel.type === ChannelType.TEXT);
+    const audioChannels = accessibleChannels.filter((channel: Channel) => channel.type === ChannelType.AUDIO);
+    const videoChannels = accessibleChannels.filter((channel: Channel) => channel.type === ChannelType.VIDEO);
+    const whiteboardChannels = accessibleChannels.filter((channel: Channel) => channel.type === ChannelType.WHITEBOARD);
 
     const members = server?.members.filter((member: Member & { profile: Profile }) => member.profileId !== profile.id);
     
@@ -91,46 +92,46 @@ export const ServerSidebar = async ({
                             {
                                 label: "Text Channels",
                                 type: "channel",
-                                data: textChannels?.map((channel) => ({
+                                data: textChannels?.map((channel: Channel) => ({
                                     id: channel.id,
                                     name: channel.name,
-                                    icon: iconMap[channel.type] 
+                                    icon: iconMap[channel.type as ChannelType] 
                                 }))
                             },
                             {
                                 label: "Voice Channels",
                                 type: "channel",
-                                data: audioChannels?.map((channel) => ({
+                                data: audioChannels?.map((channel: Channel) => ({
                                     id: channel.id,
                                     name: channel.name,
-                                    icon: iconMap[channel.type] 
+                                    icon: iconMap[channel.type as ChannelType] 
                                 }))
                             },
                             {
                                 label: "Video Channels",
                                 type: "channel",
-                                data: videoChannels?.map((channel) => ({
+                                data: videoChannels?.map((channel: Channel) => ({
                                     id: channel.id,
                                     name: channel.name,
-                                    icon: iconMap[channel.type] 
+                                    icon: iconMap[channel.type as ChannelType] 
                                 }))
                             },
                             {
                                 label: "Whiteboard Channels",
                                 type: "channel",
-                                data: whiteboardChannels?.map((channel) => ({
+                                data: whiteboardChannels?.map((channel: Channel) => ({
                                     id: channel.id,
                                     name: channel.name,
-                                    icon: iconMap[channel.type] 
+                                    icon: iconMap[channel.type as ChannelType] 
                                 }))
                             },
                             {
                                 label: "Members",
                                 type: "member",
-                                data: members?.map((member) => ({
+                                data: members?.map((member: Member & { profile: Profile }) => ({
                                     id: member.id,
                                     name: member.profile.name,
-                                    icon: roleIconMap[member.role]
+                                    icon: roleIconMap[member.role as MemberRole]
                                 }))
                             }
                             ]}
@@ -230,7 +231,7 @@ export const ServerSidebar = async ({
                             server={server}
                         />
                         <div className="space-y-[2px]">
-                            {members.map((member) => (
+                            {members.map((member: Member & { profile: Profile }) => (
                                 <ServerMember
                                     key={member.id}
                                     member={member}

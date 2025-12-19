@@ -12,9 +12,13 @@
     "docker:restart": "docker-compose restart",
     "db:migrate": "npx prisma generate && npx prisma db push",
     "db:studio": "npx prisma studio",
+    "db:seed": "npx tsx prisma/seed.ts",
     "db:benchmark": "npx ts-node scripts/benchmark-db.ts",
     "db:analyze": "psql -U postgres -d discord_db -f database-analysis.sql",
     "dev:full": "npm run docker:up && timeout /t 10 && npm run db:migrate && npm run dev"
+  },
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.31.9",
@@ -22,7 +26,7 @@
     "@livekit/components-react": "^2.9.15",
     "@livekit/components-styles": "^1.1.6",
     "@next/font": "^14.2.15",
-    "@prisma/client": "^6.15.0",
+    "@prisma/client": "^7.2.0",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -42,6 +46,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.2.3",
     "emoji-picker-react": "^4.14.1",
     "geist": "^1.5.1",
     "livekit-client": "^2.15.11",
@@ -72,8 +77,9 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@types/uuid": "^10.0.0",
-    "prisma": "^6.15.0",
+    "prisma": "^7.2.0",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "tw-animate-css": "^1.3.8",
     "typescript": "^5.9.3"
   }
