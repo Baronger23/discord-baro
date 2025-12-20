@@ -260,29 +260,55 @@ export const MessageFileModal = () => {
                 query
             });
 
-            // Use Socket.IO endpoint for real-time messages
-            const url = "/api/socket/messages";
+            // Determine if this is a channel or conversation message
+            const isConversation = query?.conversationId;
+            const isChannel = query?.channelId && query?.serverId;
+            
+            // Use appropriate Socket.IO endpoint
+            const url = isConversation 
+                ? "/api/socket/direct-messages" 
+                : "/api/socket/messages";
             
             for (const file of completedFiles) {
-                const payload = {
-                    content: file.fileName || "File attachment", // Ensure content is not empty
-                    fileUrl: file.fileUrl,
-                    channelId: query?.channelId,
-                    serverId: query?.serverId,
-                };
-
-                console.log("📨 Sending file message:", payload);
+                let payload: any;
                 
-                // Validate required fields
-                if (!payload.channelId) {
-                    throw new Error("Channel ID is missing");
+                if (isConversation) {
+                    // For conversations (direct messages)
+                    payload = {
+                        content: file.fileName || "File attachment",
+                        fileUrl: file.fileUrl,
+                        conversationId: query.conversationId,
+                    };
+                    
+                    // Validate required fields for conversation
+                    if (!payload.conversationId) {
+                        throw new Error("Conversation ID is missing");
+                    }
+                } else if (isChannel) {
+                    // For channels
+                    payload = {
+                        content: file.fileName || "File attachment",
+                        fileUrl: file.fileUrl,
+                        channelId: query.channelId,
+                        serverId: query.serverId,
+                    };
+                    
+                    // Validate required fields for channel
+                    if (!payload.channelId) {
+                        throw new Error("Channel ID is missing");
+                    }
+                    if (!payload.serverId) {
+                        throw new Error("Server ID is missing");
+                    }
+                } else {
+                    throw new Error("Invalid query parameters: neither channelId nor conversationId provided");
                 }
-                if (!payload.serverId) {
-                    throw new Error("Server ID is missing");
-                }
+                
                 if (!payload.fileUrl) {
                     throw new Error("File URL is missing");
                 }
+
+                console.log("📨 Sending file message:", payload);
                 
                 const response = await axios.post(url, payload);
                 console.log("✅ File sent:", response.data);
