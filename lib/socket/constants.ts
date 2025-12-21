@@ -21,6 +21,10 @@ export const SOCKET_EVENTS = {
   WHITEBOARD_STATE: "whiteboard:state" as const,
   WHITEBOARD_CLEAR: "whiteboard:clear" as const,
   WHITEBOARD_UNDO: "whiteboard:undo" as const,
+  WHITEBOARD_CURSOR: "whiteboard:cursor" as const,
+  WHITEBOARD_USERS: "whiteboard:users" as const,
+  WHITEBOARD_USER_JOINED: "whiteboard:user-joined" as const,
+  WHITEBOARD_USER_LEFT: "whiteboard:user-left" as const,
 };
 
 type Values<T> = T[keyof T];

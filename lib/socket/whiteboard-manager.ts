@@ -4,8 +4,15 @@
  * Lưu vào database định kỳ và khi có sự kiện quan trọng
  */
 
-import { DrawCommand, WhiteboardState } from "./types";
+import { DrawCommand, WhiteboardState, WhiteboardUser, CursorPosition } from "./types";
 import { db } from "@/lib/db";
+
+// Predefined cursor colors for different users
+const CURSOR_COLORS = [
+  "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7",
+  "#DDA0DD", "#98D8C8", "#F7DC6F", "#BB8FCE", "#85C1E9",
+  "#F8B500", "#00CED1", "#FF69B4", "#32CD32", "#FF4500",
+];
 
 class WhiteboardManager {
   // In-memory cache: channelId -> WhiteboardState
@@ -13,6 +20,12 @@ class WhiteboardManager {
   
   // Track unsaved changes: channelId -> boolean
   private dirtyChannels: Set<string> = new Set();
+  
+  // Track online users per channel: channelId -> Map<peerId, WhiteboardUser>
+  private channelUsers: Map<string, Map<string, WhiteboardUser>> = new Map();
+  
+  // Color assignment per channel: channelId -> Map<profileId, color>
+  private userColors: Map<string, Map<string, string>> = new Map();
   
   // Auto-save interval (5 seconds)
   private saveInterval: NodeJS.Timeout | null = null;
@@ -256,8 +269,145 @@ class WhiteboardManager {
     
     this.whiteboardStates.clear();
     this.dirtyChannels.clear();
+    this.channelUsers.clear();
+    this.userColors.clear();
     
     console.log("[WHITEBOARD] Shutdown complete");
+  }
+
+  // ============================================
+  // USER PRESENCE MANAGEMENT
+  // ============================================
+
+  /**
+   * Get or assign a color for a user in a channel
+   */
+  private getOrAssignUserColor(channelId: string, profileId: string): string {
+    if (!this.userColors.has(channelId)) {
+      this.userColors.set(channelId, new Map());
+    }
+    
+    const channelColors = this.userColors.get(channelId)!;
+    
+    if (!channelColors.has(profileId)) {
+      const usedColors = new Set(channelColors.values());
+      const availableColor = CURSOR_COLORS.find(c => !usedColors.has(c)) || 
+        CURSOR_COLORS[channelColors.size % CURSOR_COLORS.length];
+      channelColors.set(profileId, availableColor);
+    }
+    
+    return channelColors.get(profileId)!;
+  }
+
+  /**
+   * Add a user to a whiteboard channel
+   */
+  public addUser(
+    channelId: string, 
+    peerId: string, 
+    profileId: string, 
+    displayName: string,
+    avatarUrl: string | null
+  ): WhiteboardUser {
+    if (!this.channelUsers.has(channelId)) {
+      this.channelUsers.set(channelId, new Map());
+    }
+    
+    const users = this.channelUsers.get(channelId)!;
+    const color = this.getOrAssignUserColor(channelId, profileId);
+    
+    const user: WhiteboardUser = {
+      peerId,
+      profileId,
+      displayName,
+      avatarUrl,
+      color,
+      lastUpdate: Date.now(),
+    };
+    
+    users.set(peerId, user);
+    console.log(`[WHITEBOARD] User ${displayName} (${peerId}) joined channel ${channelId}`);
+    
+    return user;
+  }
+
+  /**
+   * Remove a user from a whiteboard channel
+   */
+  public removeUser(channelId: string, peerId: string): WhiteboardUser | null {
+    const users = this.channelUsers.get(channelId);
+    if (!users) return null;
+    
+    const user = users.get(peerId);
+    if (!user) return null;
+    
+    users.delete(peerId);
+    console.log(`[WHITEBOARD] User ${user.displayName} (${peerId}) left channel ${channelId}`);
+    
+    // Clean up if no users left
+    if (users.size === 0) {
+      this.channelUsers.delete(channelId);
+      this.userColors.delete(channelId);
+    }
+    
+    return user;
+  }
+
+  /**
+   * Remove a user from all whiteboard channels (on disconnect)
+   */
+  public removeUserFromAllChannels(peerId: string): Map<string, WhiteboardUser> {
+    const removedFrom = new Map<string, WhiteboardUser>();
+    
+    for (const [channelId, users] of this.channelUsers.entries()) {
+      const user = users.get(peerId);
+      if (user) {
+        users.delete(peerId);
+        removedFrom.set(channelId, user);
+        
+        // Clean up if no users left
+        if (users.size === 0) {
+          this.channelUsers.delete(channelId);
+          this.userColors.delete(channelId);
+        }
+      }
+    }
+    
+    return removedFrom;
+  }
+
+  /**
+   * Get all users in a whiteboard channel
+   */
+  public getUsers(channelId: string): WhiteboardUser[] {
+    const users = this.channelUsers.get(channelId);
+    if (!users) return [];
+    return Array.from(users.values());
+  }
+
+  /**
+   * Update a user's cursor position
+   */
+  public updateCursor(channelId: string, peerId: string, cursor: CursorPosition): WhiteboardUser | null {
+    const users = this.channelUsers.get(channelId);
+    if (!users) return null;
+    
+    const user = users.get(peerId);
+    if (!user) return null;
+    
+    user.cursor = cursor;
+    user.lastUpdate = Date.now();
+    
+    return user;
+  }
+
+  /**
+   * Get a specific user
+   */
+  public getUser(channelId: string, peerId: string): WhiteboardUser | null {
+    const users = this.channelUsers.get(channelId);
+    if (!users) return null;
+    return users.get(peerId) || null;
   }
 }
 

@@ -13,6 +13,8 @@ import type {
   ServerToClientEvents,
   SocketData,
   DrawCommand,
+  WhiteboardUser,
+  CursorPosition,
 } from "./types";
 import { presenceManager } from "./presence";
 import { whiteboardManager } from "./whiteboard-manager";
@@ -376,11 +378,33 @@ const registerCoreEvents = (io: TypedIOServer) => {
         socket.join(whiteboardRoom(channelId));
         console.log(`[WHITEBOARD] ${member.profile.name} joined ${channelId}`);
 
+        // Add user to presence tracking
+        const newUser = whiteboardManager.addUser(
+          channelId,
+          socket.id,
+          profileId,
+          member.profile.name,
+          member.profile.imageUrl
+        );
+
         // Load and send current state
         const state = await whiteboardManager.loadState(channelId);
         socket.emit(SOCKET_EVENTS.WHITEBOARD_STATE, {
           channelId,
           state,
+        });
+
+        // Send current users list to the new user
+        const onlineUsers = whiteboardManager.getUsers(channelId);
+        socket.emit(SOCKET_EVENTS.WHITEBOARD_USERS, {
+          channelId,
+          users: onlineUsers,
+        });
+
+        // Notify other users about the new user
+        socket.to(whiteboardRoom(channelId)).emit(SOCKET_EVENTS.WHITEBOARD_USER_JOINED, {
+          channelId,
+          user: newUser,
         });
 
       } catch (error) {
@@ -389,8 +413,32 @@ const registerCoreEvents = (io: TypedIOServer) => {
     });
 
     socket.on(SOCKET_EVENTS.WHITEBOARD_LEAVE, ({ channelId }) => {
+      // Remove user from presence tracking
+      const removedUser = whiteboardManager.removeUser(channelId, socket.id);
+      
       socket.leave(whiteboardRoom(channelId));
       console.log(`[WHITEBOARD] ${profileId} left ${channelId}`);
+
+      // Notify other users
+      if (removedUser) {
+        socket.to(whiteboardRoom(channelId)).emit(SOCKET_EVENTS.WHITEBOARD_USER_LEFT, {
+          channelId,
+          peerId: socket.id,
+        });
+      }
+    });
+
+    socket.on(SOCKET_EVENTS.WHITEBOARD_CURSOR, ({ channelId, cursor }) => {
+      // Update cursor position in manager
+      const updatedUser = whiteboardManager.updateCursor(channelId, socket.id, cursor);
+      
+      if (updatedUser) {
+        // Broadcast cursor position to other users
+        socket.to(whiteboardRoom(channelId)).emit(SOCKET_EVENTS.WHITEBOARD_CURSOR, {
+          channelId,
+          user: updatedUser,
+        });
+      }
     });
 
     socket.on(SOCKET_EVENTS.WHITEBOARD_DRAW, async ({ channelId, command: partialCommand }) => {
@@ -493,6 +541,15 @@ const registerCoreEvents = (io: TypedIOServer) => {
             peerId: socket.id,
           });
         }
+      });
+
+      // Handle whiteboard disconnection - remove from all channels
+      const removedFromChannels = whiteboardManager.removeUserFromAllChannels(socket.id);
+      removedFromChannels.forEach((user, channelId) => {
+        socket.to(whiteboardRoom(channelId)).emit(SOCKET_EVENTS.WHITEBOARD_USER_LEFT, {
+          channelId,
+          peerId: socket.id,
+        });
       });
     });
   });

@@ -46,6 +46,22 @@ export type WhiteboardState = {
   version: number;
 };
 
+// Whiteboard cursor tracking
+export type CursorPosition = {
+  x: number;
+  y: number;
+};
+
+export type WhiteboardUser = {
+  peerId: string; // socket.id
+  profileId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  cursor?: CursorPosition;
+  color: string; // unique color for cursor
+  lastUpdate: number;
+};
+
 export type ServerToClientEvents = {
   "chat:message": (payload: {
     channelId: string;
@@ -130,6 +146,22 @@ export type ServerToClientEvents = {
     channelId: string;
     commandId: string;
   }) => void;
+  "whiteboard:cursor": (payload: {
+    channelId: string;
+    user: WhiteboardUser;
+  }) => void;
+  "whiteboard:users": (payload: {
+    channelId: string;
+    users: WhiteboardUser[];
+  }) => void;
+  "whiteboard:user-joined": (payload: {
+    channelId: string;
+    user: WhiteboardUser;
+  }) => void;
+  "whiteboard:user-left": (payload: {
+    channelId: string;
+    peerId: string;
+  }) => void;
 };
 
 export type ClientToServerEvents = {
@@ -211,6 +243,10 @@ export type ClientToServerEvents = {
   "whiteboard:undo": (payload: {
     channelId: string;
     commandId: string;
+  }) => void;
+  "whiteboard:cursor": (payload: {
+    channelId: string;
+    cursor: CursorPosition;
   }) => void;
 };
 
