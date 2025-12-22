@@ -47,7 +47,7 @@ export class MediaManager {
   }
 
   /**
-   * Get screen share stream
+   * Get screen share stream (DUAL STREAM MODE - keeps camera active)
    */
   async getScreenShare(): Promise<MediaStream> {
     try {
@@ -58,14 +58,21 @@ export class MediaManager {
 
       // Handle user clicking "Stop sharing" button in browser
       this.screenStream.getVideoTracks()[0].onended = () => {
+        console.log("[MediaManager] Screen share ended by user");
         this.stopScreenShare();
       };
 
-      console.log("[MediaManager] Got screen share");
+      console.log("[MediaManager] Got screen share (dual stream mode - camera remains active)");
+      console.log("[MediaManager] Screen stream tracks:", this.screenStream.getTracks().map(t => ({
+        kind: t.kind,
+        id: t.id,
+        label: t.label
+      })));
 
       return this.screenStream;
     } catch (error) {
       console.error("[MediaManager] Failed to get screen share:", error);
+      this.mediaState.screenSharing = false;
       throw new Error(`Failed to share screen: ${error}`);
     }
   }

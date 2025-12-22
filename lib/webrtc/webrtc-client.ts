@@ -91,30 +91,68 @@ export class WebRTCClient extends EventEmitter {
     const localStream = this.mediaManager.getLocalStream();
     if (localStream) {
       localStream.getTracks().forEach(track => {
+        console.log(`[WebRTCClient] Adding local ${track.kind} track to peer:`, peerId);
         peerConnection.addTrack(track, localStream);
       });
     }
 
-    // Handle remote stream
-    const remoteStream = new MediaStream();
+    // Handle remote stream - separate camera and screen
+    const remoteCameraStream = new MediaStream();
+    const remoteScreenStream = new MediaStream();
+    
     peerConnection.ontrack = (event) => {
-      console.log("[WebRTCClient] Received remote track:", event.track.kind, "from:", peerId);
+      console.log("[WebRTCClient] 📥 Received remote track:", event.track.kind, "from:", peerId);
+      console.log("[WebRTCClient] Track details:", {
+        id: event.track.id,
+        label: event.track.label,
+        kind: event.track.kind,
+        readyState: event.track.readyState,
+        streamCount: event.streams?.length,
+        streamId: event.streams?.[0]?.id,
+      });
       
-      // Add track to remote stream
-      if (event.streams && event.streams[0]) {
-        event.streams[0].getTracks().forEach(track => {
-          remoteStream.addTrack(track);
-        });
+      // Detect if this is screen share or camera based on stream label or track count
+      const streamId = event.streams?.[0]?.id || '';
+      const trackLabel = event.track.label?.toLowerCase() || '';
+      const isScreenShare = streamId.includes('screen') || trackLabel.includes('screen');
+      
+      console.log("[WebRTCClient] Detection:", {
+        streamId,
+        trackLabel,
+        isScreenShare,
+      });
+      
+      if (isScreenShare) {
+        console.log("[WebRTCClient] 📺 Detected SCREEN SHARE track from:", peerId);
+        remoteScreenStream.addTrack(event.track);
+        
+        // Update peer's screen stream
+        const peer = this.peers.get(peerId);
+        if (peer) {
+          peer.remoteScreenStream = remoteScreenStream;
+          console.log("[WebRTCClient] ✅ Updated peer screen stream. Emitting remote-stream (screen) for:", peerId);
+          console.log("[WebRTCClient] Stream details:", {
+            id: remoteScreenStream.id,
+            videoTracks: remoteScreenStream.getVideoTracks().length,
+          });
+          this.emit("remote-stream", peerId, remoteScreenStream, "screen");
+        }
       } else {
-        remoteStream.addTrack(event.track);
-      }
-
-      // Update peer's remote stream
-      const peer = this.peers.get(peerId);
-      if (peer) {
-        peer.remoteStream = remoteStream;
-        console.log("[WebRTCClient] Emitting remote-stream for:", peerId);
-        this.emit("remote-stream", peerId, remoteStream);
+        console.log("[WebRTCClient] 🎥 Detected CAMERA track from:", peerId);
+        remoteCameraStream.addTrack(event.track);
+        
+        // Update peer's camera stream
+        const peer = this.peers.get(peerId);
+        if (peer) {
+          peer.remoteCameraStream = remoteCameraStream;
+          console.log("[WebRTCClient] ✅ Updated peer camera stream. Emitting remote-stream (camera) for:", peerId);
+          console.log("[WebRTCClient] Stream details:", {
+            id: remoteCameraStream.id,
+            videoTracks: remoteCameraStream.getVideoTracks().length,
+            audioTracks: remoteCameraStream.getAudioTracks().length,
+          });
+          this.emit("remote-stream", peerId, remoteCameraStream, "camera");
+        }
       }
     };
 
@@ -133,9 +171,55 @@ export class WebRTCClient extends EventEmitter {
       }
     };
 
+    // Handle renegotiation (CRITICAL for dual stream)
+    peerConnection.onnegotiationneeded = async () => {
+      console.log("[WebRTCClient] 🔄 Negotiation needed for peer:", peerId);
+      
+      const peer = this.peers.get(peerId);
+      if (!peer) {
+        console.log("[WebRTCClient] ⚠️ Peer not found in map during renegotiation");
+        return;
+      }
+      
+      console.log("[WebRTCClient] Initial setup complete:", peer.isInitialSetupComplete);
+      console.log("[WebRTCClient] Signaling state:", peerConnection.signalingState);
+      
+      // Skip during initial setup or if not stable
+      if (!peer.isInitialSetupComplete) {
+        console.log("[WebRTCClient] ⏭️ Skipping renegotiation - initial setup not complete");
+        return;
+      }
+      
+      if (peerConnection.signalingState !== "stable") {
+        console.log("[WebRTCClient] ⏭️ Skipping renegotiation - signaling state not stable:", peerConnection.signalingState);
+        return;
+      }
+
+      try {
+        console.log("[WebRTCClient] Creating renegotiation offer for:", peerId);
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        
+        // Emit renegotiation offer through signaling
+        this.emit("renegotiation-needed", peerId);
+        
+        console.log("[WebRTCClient] ✅ Renegotiation offer created for:", peerId);
+      } catch (error) {
+        console.error("[WebRTCClient] Renegotiation failed:", error);
+      }
+    };
+
     // Handle connection state changes
     peerConnection.onconnectionstatechange = () => {
       console.log("[WebRTCClient] Connection state:", peerId, peerConnection.connectionState);
+
+      const peer = this.peers.get(peerId);
+      
+      // Enable renegotiation when connection is established
+      if (peerConnection.connectionState === "connected" && peer) {
+        console.log("[WebRTCClient] ✅ Connection established. Enabling renegotiation for:", peerId);
+        peer.isInitialSetupComplete = true;
+      }
 
       if (peerConnection.connectionState === "disconnected" || 
           peerConnection.connectionState === "failed") {
@@ -153,23 +237,16 @@ export class WebRTCClient extends EventEmitter {
       peerId,
       displayName,
       connection: peerConnection,
-      remoteStream: null,
+      remoteCameraStream: null,
+      remoteScreenStream: null,
       audioEnabled: true,
       videoEnabled: true,
       screenSharing: false,
-    });
-
-    // Emit peer-joined event
-    this.emit("peer-joined", {
-      id: peerId,
-      displayName,
-      audioEnabled: true,
-      videoEnabled: true,
-      screenSharing: false,
-      joinedAt: new Date(),
+      isInitialSetupComplete: false,  // Will be set to true when connection established
     });
 
     console.log("[WebRTCClient] Peer connection created for:", peerId, displayName);
+    console.log("[WebRTCClient] Local tracks added:", localStream?.getTracks().length || 0);
 
     return peerConnection;
   }
@@ -210,6 +287,9 @@ export class WebRTCClient extends EventEmitter {
       peerConnection = await this.createPeerConnection(peerId, displayName);
     }
 
+    console.log("[WebRTCClient] Handling offer from:", peerId);
+    console.log("[WebRTCClient] Offer tracks:", offer.sdp?.match(/m=/g)?.length || 0);
+
     // Set remote description first
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
 
@@ -218,6 +298,16 @@ export class WebRTCClient extends EventEmitter {
     await peerConnection.setLocalDescription(answer);
 
     console.log("[WebRTCClient] Created answer for:", peerId);
+    
+    // Emit peer-joined event after answer is created
+    this.emit("peer-joined", {
+      id: peerId,
+      displayName,
+      audioEnabled: true,
+      videoEnabled: true,
+      screenSharing: false,
+      joinedAt: new Date(),
+    });
 
     return answer;
   }
@@ -232,10 +322,22 @@ export class WebRTCClient extends EventEmitter {
       return;
     }
 
+    console.log("[WebRTCClient] Handling answer from:", peerId);
+
     // Only set remote description if we're in the right state
     if (peer.connection.signalingState === "have-local-offer") {
       await peer.connection.setRemoteDescription(new RTCSessionDescription(answer));
-      console.log("[WebRTCClient] Set remote description (answer) for:", peerId);
+      console.log("[WebRTCClient] ✅ Set remote description (answer) for:", peerId);
+      
+      // Emit peer-joined event after connection is established
+      this.emit("peer-joined", {
+        id: peerId,
+        displayName: peer.displayName,
+        audioEnabled: peer.audioEnabled,
+        videoEnabled: peer.videoEnabled,
+        screenSharing: peer.screenSharing,
+        joinedAt: new Date(),
+      });
     } else {
       console.warn("[WebRTCClient] Invalid signaling state for answer:", peer.connection.signalingState);
     }
@@ -300,61 +402,106 @@ export class WebRTCClient extends EventEmitter {
   }
 
   /**
-   * Start screen sharing
+   * Start screen sharing (DUAL STREAM MODE - adds screen track without replacing camera)
    */
   async startScreenShare(): Promise<void> {
     try {
+      console.log("[WebRTCClient] 📺 Starting screen share (dual stream mode)");
+      
       const screenStream = await this.mediaManager.getScreenShare();
+      const screenTrack = screenStream.getVideoTracks()[0];
 
-      // Replace video track in all peer connections
-      const videoTrack = screenStream.getVideoTracks()[0];
+      if (!screenTrack) {
+        throw new Error("No video track in screen stream");
+      }
 
-      this.peers.forEach((peer) => {
-        const sender = peer.connection
-          .getSenders()
-          .find(s => s.track?.kind === "video");
-
-        if (sender) {
-          sender.replaceTrack(videoTrack);
-        }
+      console.log("[WebRTCClient] Screen track obtained:", {
+        id: screenTrack.id,
+        label: screenTrack.label,
+        kind: screenTrack.kind
       });
 
+      // Emit local screen stream event for UI
+      this.emit("local-screen-stream", screenStream);
+      console.log("[WebRTCClient] ✅ Emitted local-screen-stream event");
+
+      // Add screen track to all peer connections (ADDTRACK, not replaceTrack)
+      this.peers.forEach((peer) => {
+        console.log(`[WebRTCClient] Adding screen track to peer: ${peer.peerId}`);
+        console.log(`[WebRTCClient] Peer connection state:`, peer.connection.connectionState);
+        console.log(`[WebRTCClient] Peer signaling state:`, peer.connection.signalingState);
+        console.log(`[WebRTCClient] Current transceivers:`, peer.connection.getTransceivers().length);
+        
+        // Add the new screen track - this will trigger negotiationneeded event
+        const sender = peer.connection.addTrack(screenTrack, screenStream);
+        
+        console.log(`[WebRTCClient] ✅ Screen track added to ${peer.peerId}`);
+        console.log(`[WebRTCClient] Sender mid:`, sender.track?.id);
+        console.log(`[WebRTCClient] After addTrack - transceivers:`, peer.connection.getTransceivers().length);
+      });
+
+      // Note: Renegotiation will be handled automatically by onnegotiationneeded event
       this.broadcastMediaStateChange({ screenSharing: true });
 
-      console.log("[WebRTCClient] Started screen sharing");
+      console.log("[WebRTCClient] ✅ Screen sharing started (dual stream mode)");
+      console.log("[WebRTCClient] Camera remains active. Both streams are now being sent.");
     } catch (error) {
       console.error("[WebRTCClient] Failed to start screen share:", error);
+      this.mediaManager.stopScreenShare();
       throw error;
     }
   }
 
   /**
-   * Stop screen sharing
+   * Stop screen sharing (DUAL STREAM MODE - removes screen track, keeps camera)
    */
   async stopScreenShare(): Promise<void> {
-    this.mediaManager.stopScreenShare();
-
-    // Restore camera video track
-    const localStream = this.mediaManager.getLocalStream();
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
-
-      if (videoTrack) {
-        this.peers.forEach((peer) => {
-          const sender = peer.connection
-            .getSenders()
-            .find(s => s.track?.kind === "video");
-
-          if (sender) {
-            sender.replaceTrack(videoTrack);
-          }
-        });
-      }
+    console.log("[WebRTCClient] 🚫 Stopping screen share (dual stream mode)");
+    
+    const screenStream = this.mediaManager.getScreenStream();
+    if (!screenStream) {
+      console.log("[WebRTCClient] No active screen stream to stop");
+      return;
     }
 
+    const screenTrack = screenStream.getVideoTracks()[0];
+    if (!screenTrack) {
+      console.log("[WebRTCClient] No screen track found");
+      this.mediaManager.stopScreenShare();
+      this.broadcastMediaStateChange({ screenSharing: false });
+      return;
+    }
+
+    // Stop screen track transceivers (preserve m-line order)
+    this.peers.forEach((peer) => {
+      const transceivers = peer.connection.getTransceivers();
+      transceivers.forEach((transceiver) => {
+        if (transceiver.sender.track?.id === screenTrack.id) {
+          console.log(`[WebRTCClient] Stopping screen transceiver for peer: ${peer.peerId}`);
+          // Stop the transceiver instead of removing track to preserve m-line order
+          transceiver.stop();
+        }
+      });
+    });
+
+    // Stop the screen stream
+    this.mediaManager.stopScreenShare();
+    
+    // Note: Renegotiation will be handled automatically by onnegotiationneeded event
     this.broadcastMediaStateChange({ screenSharing: false });
 
-    console.log("[WebRTCClient] Stopped screen sharing");
+    console.log("[WebRTCClient] ✅ Screen sharing stopped (camera still active)");
+    
+    // Make sure local camera stream is still available
+    const localStream = this.mediaManager.getLocalStream();
+    if (localStream) {
+      console.log("[WebRTCClient] ✅ Local camera stream still active:", {
+        videoTracks: localStream.getVideoTracks().length,
+        audioTracks: localStream.getAudioTracks().length,
+      });
+      // Re-emit local stream to ensure UI updates
+      this.emit("local-stream", localStream);
+    }
   }
 
   /**

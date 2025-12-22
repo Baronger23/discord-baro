@@ -22,10 +22,12 @@ export interface PeerConnection {
   peerId: string;
   displayName: string;
   connection: RTCPeerConnection;
-  remoteStream: MediaStream | null;
+  remoteCameraStream: MediaStream | null;  // Camera stream
+  remoteScreenStream: MediaStream | null;  // Screen share stream
   audioEnabled: boolean;
   videoEnabled: boolean;
   screenSharing: boolean;
+  isInitialSetupComplete: boolean;  // Track if initial negotiation is done
 }
 
 export interface LocalMediaState {
@@ -44,7 +46,7 @@ export interface WebRTCRoomOptions {
 }
 
 export interface SignalingMessage {
-  type: "offer" | "answer" | "ice-candidate" | "user-joined" | "user-left" | "media-state-changed";
+  type: "offer" | "answer" | "ice-candidate" | "user-joined" | "user-left" | "media-state-changed" | "renegotiate-offer" | "renegotiate-answer";
   from: string;
   to?: string;
   data?: any;
@@ -65,15 +67,20 @@ export interface RoomParticipant {
   joinedAt: Date;
 }
 
+// Stream type identifier
+export type StreamType = "camera" | "screen";
+
 // Events emitted by WebRTC client
 export interface WebRTCEvents {
   "connection-state-change": (state: ConnectionState) => void;
   "local-stream": (stream: MediaStream) => void;
-  "remote-stream": (peerId: string, stream: MediaStream) => void;
+  "local-screen-stream": (stream: MediaStream) => void;  // New: separate screen stream event
+  "remote-stream": (peerId: string, stream: MediaStream, streamType: StreamType) => void;  // Updated: add streamType
   "peer-joined": (participant: RoomParticipant) => void;
   "peer-left": (peerId: string) => void;
   "peer-media-changed": (peerId: string, mediaState: Partial<LocalMediaState>) => void;
   "ice-candidate": (payload: { peerId: string; candidate: IceCandidate }) => void;
   "need-offer": (payload: { peerId: string; displayName: string }) => void;
+  "renegotiation-needed": (peerId: string) => void;  // New: trigger renegotiation
   "error": (error: Error) => void;
 }

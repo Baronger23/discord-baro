@@ -112,6 +112,19 @@ export type ServerToClientEvents = {
     videoEnabled?: boolean;
     screenSharing?: boolean;
   }) => void;
+  // NEW: Renegotiation events for dual streams
+  "webrtc:renegotiate-offer": (payload: {
+    from: string;
+    to: string;
+    roomId: string;
+    offer: RTCSessionDescriptionInit;
+  }) => void;
+  "webrtc:renegotiate-answer": (payload: {
+    from: string;
+    to: string;
+    roomId: string;
+    answer: RTCSessionDescriptionInit;
+  }) => void;
   
   // Whiteboard events (server -> client)
   "whiteboard:draw": (payload: {
@@ -191,6 +204,17 @@ export type ClientToServerEvents = {
     audioEnabled?: boolean;
     videoEnabled?: boolean;
     screenSharing?: boolean;
+  }) => void;
+  // NEW: Renegotiation events for dual streams
+  "webrtc:renegotiate-offer": (payload: {
+    to: string;
+    roomId: string;
+    offer: RTCSessionDescriptionInit;
+  }) => void;
+  "webrtc:renegotiate-answer": (payload: {
+    to: string;
+    roomId: string;
+    answer: RTCSessionDescriptionInit;
   }) => void;
   
   // Whiteboard events (client -> server)
