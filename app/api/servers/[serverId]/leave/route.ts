@@ -6,8 +6,12 @@ export async function PATCH(
     { params }: { params: Promise<{ serverId: string }> }
 ) {
     try {
-        const resolvedParams = await params;
-        const profile = await currentProfile();
+        // Run params and profile fetch in parallel
+        const [resolvedParams, profile] = await Promise.all([
+            params,
+            currentProfile()
+        ]);
+        
         if (!profile) {
             return new NextResponse('Unauthorized', { status: 401 });
         }

@@ -11,54 +11,54 @@ export async function GET(
   { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
-    const profile = await currentProfile();
+    // Run params and profile fetch in parallel
+    const [{ conversationId }, profile] = await Promise.all([
+      params,
+      currentProfile()
+    ]);
+    
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { conversationId } = await params;
-
-    // Verify user is part of conversation
-    const conversation = await db.conversation.findFirst({
-      where: {
-        id: conversationId,
-        OR: [
-          {
-            memberOne: {
-              profileId: profile.id
-            }
-          },
-          {
-            memberTwo: {
-              profileId: profile.id
-            }
+    // Run conversation verification and pinned messages fetch in parallel
+    // The conversation query will fail if user doesn't have access
+    const [conversation, pinnedMessages] = await Promise.all([
+      db.conversation.findFirst({
+        where: {
+          id: conversationId,
+          OR: [
+            { memberOne: { profileId: profile.id } },
+            { memberTwo: { profileId: profile.id } }
+          ]
+        },
+        select: { id: true } // Only need to verify existence
+      }),
+      db.directMessage.findMany({
+        where: {
+          conversationId,
+          pinned: true,
+          deleted: false,
+          // Also verify user has access through conversation
+          conversation: {
+            OR: [
+              { memberOne: { profileId: profile.id } },
+              { memberTwo: { profileId: profile.id } }
+            ]
           }
-        ]
-      }
-    });
+        },
+        include: {
+          member: {
+            include: { profile: true }
+          }
+        },
+        orderBy: { pinnedAt: 'desc' }
+      })
+    ]);
 
     if (!conversation) {
       return new NextResponse("Conversation not found or access denied", { status: 404 });
     }
-
-    // Get all pinned messages
-    const pinnedMessages = await db.directMessage.findMany({
-      where: {
-        conversationId,
-        pinned: true,
-        deleted: false
-      },
-      include: {
-        member: {
-          include: {
-            profile: true
-          }
-        }
-      },
-      orderBy: {
-        pinnedAt: 'desc'
-      }
-    });
 
     return NextResponse.json(pinnedMessages);
 

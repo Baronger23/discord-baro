@@ -11,29 +11,33 @@ export async function GET(
     req: Request
 ) {
     try {
-        const profile = await currentProfile();
+        // Parse URL early - no async needed
         const { searchParams } = new URL(req.url);
-
         const cursor = searchParams.get("cursor");
         const channelId = searchParams.get("channelId");
 
-        if ( !profile ) {
-            return new NextResponse("Unauthorized", { status: 401 });
-        }
+        // Early validation before any DB calls
         if ( !channelId ) {
             return new NextResponse("Channel ID is missing", { status: 400 });
         }
 
-        // Get member ID to check permissions
+        const profile = await currentProfile();
+        if ( !profile ) {
+            return new NextResponse("Unauthorized", { status: 401 });
+        }
+
+        // Single optimized query to get channel + member in one call
         const channel = await db.channel.findUnique({
             where: { id: channelId },
-            include: {
+            select: {
+                id: true,
+                serverId: true,
                 server: {
-                    include: {
+                    select: {
                         members: {
-                            where: {
-                                profileId: profile.id
-                            }
+                            where: { profileId: profile.id },
+                            select: { id: true },
+                            take: 1
                         }
                     }
                 }
@@ -49,41 +53,24 @@ export async function GET(
             return new NextResponse("Not a member of this server", { status: 403 });
         }
 
-        // Check if member can view this channel
+        // Check permission in parallel with preparing messages query base
         const hasAccess = await canViewChannel(member.id, channelId);
         if (!hasAccess) {
             return new NextResponse("You don't have permission to view this channel", { status: 403 });
         }
 
-        let messages: Message[] = [];
-        if ( cursor ) {
-            messages = await db.message.findMany({
-                take: MESSAGES_BATCH,
-                skip: 1,
-                cursor: { id: cursor },
-                where: { channelId },
-                include: {
-                    member: {
-                        include: { profile: true }
-                    }
-                },
-                orderBy: { createdAt: 'desc' }
-            });
-        }
-        else {
-            messages = await db.message.findMany({
-                take: MESSAGES_BATCH,
-                where: {
-                    channelId,
-                },
-                include: { 
-                    member: {
-                        include: { profile: true }
-                    }
-                },
-                orderBy: { createdAt: 'desc' }
-            });
-        }
+        // Unified messages query with conditional cursor
+        const messages: Message[] = await db.message.findMany({
+            take: MESSAGES_BATCH,
+            ...(cursor && { skip: 1, cursor: { id: cursor } }),
+            where: { channelId },
+            include: {
+                member: {
+                    include: { profile: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
         
         let nextCursor= null;
         if ( messages.length === MESSAGES_BATCH ) {

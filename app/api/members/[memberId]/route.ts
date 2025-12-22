@@ -59,31 +59,38 @@ export async function PATCH(
     { params }: { params: Promise<{ memberId: string }> }
 ) {
     try {
-        const resolvedParams = await params;
-        const profile = await currentProfile();
+        // Parse all inputs in parallel
         const { searchParams } = new URL(req.url);
-        const { role } = await req.json();
-
         const serverId = searchParams.get("serverId");
+        
+        // Early validation before any async operations
+        if (!serverId) {
+            return new NextResponse('ServerId is missing', { status: 400 });
+        }
+
+        // Run params resolution, profile fetch, and body parsing in parallel
+        const [resolvedParams, profile, body] = await Promise.all([
+            params,
+            currentProfile(),
+            req.json()
+        ]);
+        
+        const { role } = body;
         
         if (!profile) {
             return new NextResponse('Unauthorized', { status: 401 });
-        }
-        if (!serverId) {
-            return new NextResponse('ServerId is missing', { status: 400 });
         }
         if (!resolvedParams.memberId) {
             return new NextResponse('MemberId is missing', { status: 400 });
         }
 
-        // Check if member exists and get member info
+        // Check if member exists with minimal data needed
         const existingMember = await db.member.findFirst({
-            where: {
-                id: resolvedParams.memberId,
-            },
-            include: {
-                profile: true,
-                server: true
+            where: { id: resolvedParams.memberId },
+            select: {
+                id: true,
+                profileId: true,
+                serverId: true
             }
         });
         
@@ -101,33 +108,25 @@ export async function PATCH(
             return new NextResponse('Member not in this server', { status: 400 });
         }
         
-        // Update the member's role
-        await db.member.update({
-            where: {
-                id: resolvedParams.memberId,
-            },
-            data: {
-                role
-            }
-        });
-
-        // Get the updated server with members
-        const server = await db.server.findUnique({
-            where: {
-                id: serverId,
-                profileId: profile.id
-            },
-            include: {
-                members: {
-                    include: {
-                        profile: true
-                    },
-                    orderBy: {
-                        role: "asc"
+        // Update member and fetch updated server in one transaction
+        const [, server] = await Promise.all([
+            db.member.update({
+                where: { id: resolvedParams.memberId },
+                data: { role }
+            }),
+            db.server.findUnique({
+                where: {
+                    id: serverId,
+                    profileId: profile.id
+                },
+                include: {
+                    members: {
+                        include: { profile: true },
+                        orderBy: { role: "asc" }
                     }
                 }
-            }
-        });
+            })
+        ]);
 
         if (!server) {
             return new NextResponse('Server not found', { status: 404 });

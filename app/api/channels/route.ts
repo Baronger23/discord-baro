@@ -7,17 +7,25 @@ export async function POST (
     req: Request,
 ) {
     try {
-        const profile = await currentProfile();
-        const { name, type } = await req.json();
+        // Parse URL early for validation - no async needed
         const { searchParams } = new URL(req.url);
-
         const serverId = searchParams.get("serverId");
+        
+        // Early validation before any async operations
+        if (!serverId) {
+            return new NextResponse('Server ID missing', { status: 400 });
+        }
+
+        // Run profile fetch and body parsing in parallel
+        const [profile, body] = await Promise.all([
+            currentProfile(),
+            req.json()
+        ]);
+        
+        const { name, type } = body;
         
         if (!profile) {
             return new NextResponse('Unauthorized', { status: 401 });
-        }
-        if (!serverId) {
-            return new NextResponse('Server ID missing', { status: 400 });
         }
         if (name === "general") {
             return new NextResponse("Name cannot be 'general'", { status: 400 });

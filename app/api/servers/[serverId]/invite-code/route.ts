@@ -7,12 +7,15 @@ export async function PATCH(
     { params }: { params: Promise<{ serverId: string }> } 
 ) {
     try {
-        const profile = await currentProfile();
+        // Run params and profile fetch in parallel
+        const [{ serverId }, profile] = await Promise.all([
+            params,
+            currentProfile()
+        ]);
+        
         if (!profile) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
-        
-        const { serverId } = await params;
         
         if (!serverId) { 
             return new NextResponse('Bad Request', { status: 400 });

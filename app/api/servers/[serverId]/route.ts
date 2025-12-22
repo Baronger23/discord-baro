@@ -7,12 +7,19 @@ export async function PATCH(
     { params }: { params: Promise<{ serverId: string }> }
 ) {
     try {
-        const resolvedParams = await params;
-        const profile = await currentProfile();
-        const { name, imageUrl } = await req.json();
+        // Run all parsing operations in parallel
+        const [resolvedParams, profile, body] = await Promise.all([
+            params,
+            currentProfile(),
+            req.json()
+        ]);
+        
+        const { name, imageUrl } = body;
+        
         if (!profile) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
+        
         const server = await db.server.update({
             where: {
                 id: resolvedParams.serverId,
@@ -36,11 +43,16 @@ export async function DELETE(
     { params }: { params: Promise<{ serverId: string }> }
 ) {
     try {
-        const resolvedParams = await params;
-        const profile = await currentProfile();
+        // Run params and profile fetch in parallel
+        const [resolvedParams, profile] = await Promise.all([
+            params,
+            currentProfile()
+        ]);
+        
         if (!profile) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
+        
         const server = await db.server.delete({
             where: {
                 id: resolvedParams.serverId,

@@ -10,48 +10,33 @@ export async function GET(
     req: Request
 ) {
     try {
-        const profile = await currentProfile();
+        // Parse URL early - no async needed
         const { searchParams } = new URL(req.url);
-
         const cursor = searchParams.get("cursor");
         const conversationId = searchParams.get("conversationId");
 
-        if ( !profile ) {
-            return new NextResponse("Unauthorized", { status: 401 });
-        }
+        // Early validation before DB calls
         if ( !conversationId ) {
             return new NextResponse("Conversation ID is missing", { status: 400 });
         }
 
-        let messages: DirectMessage[] = [];
-        if ( cursor ) {
-            messages = await db.directMessage.findMany({
-                take: MESSAGES_BATCH,
-                skip: 1,
-                cursor: { id: cursor },
-                where: { conversationId },
-                include: {
-                    member: {
-                        include: { profile: true }
-                    }
-                },
-                orderBy: { createdAt: 'desc' }
-            });
+        const profile = await currentProfile();
+        if ( !profile ) {
+            return new NextResponse("Unauthorized", { status: 401 });
         }
-        else {
-            messages = await db.directMessage.findMany({
-                take: MESSAGES_BATCH,
-                where: {
-                    conversationId,
-                },
-                include: { 
-                    member: {
-                        include: { profile: true }
-                    }
-                },
-                orderBy: { createdAt: 'desc' }
-            });
-        }
+
+        // Unified query with conditional cursor - eliminates duplicate code
+        const messages: DirectMessage[] = await db.directMessage.findMany({
+            take: MESSAGES_BATCH,
+            ...(cursor && { skip: 1, cursor: { id: cursor } }),
+            where: { conversationId },
+            include: {
+                member: {
+                    include: { profile: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
         
         let nextCursor= null;
         if ( messages.length === MESSAGES_BATCH ) {

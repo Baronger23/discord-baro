@@ -7,16 +7,23 @@ export async function DELETE(
     { params }: { params: Promise<{ channelId: string }> }
 ) {
     try {
-        const profile = await currentProfile();
+        // Parse URL early for validation
         const { searchParams } = new URL(req.url);
         const serverId = searchParams.get("serverId");
-        const { channelId } = await params;
+        
+        // Early validation
+        if (!serverId) {
+            return NextResponse.json({ error: 'Server Id missing' }, { status: 400 });
+        }
+
+        // Run params and profile in parallel
+        const [{ channelId }, profile] = await Promise.all([
+            params,
+            currentProfile()
+        ]);
 
         if (!profile) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-        if (!serverId) {
-            return NextResponse.json({ error: 'Server Id missing' }, { status: 400 });
         }
         if (!channelId) {
             return NextResponse.json({ error: 'Channel Id missing' }, { status: 400 });
@@ -57,17 +64,26 @@ export async function PATCH(
     { params }: { params: Promise<{ channelId: string }> }
 ) {
     try {
-        const profile = await currentProfile();
-        const { name, type } = await req.json();
+        // Parse URL early for validation
         const { searchParams } = new URL(req.url);
         const serverId = searchParams.get("serverId");
-        const { channelId } = await params;
+        
+        // Early validation
+        if (!serverId) {
+            return NextResponse.json({ error: 'Server Id missing' }, { status: 400 });
+        }
+
+        // Run params, profile and body parsing in parallel
+        const [{ channelId }, profile, body] = await Promise.all([
+            params,
+            currentProfile(),
+            req.json()
+        ]);
+        
+        const { name, type } = body;
 
         if (!profile) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-        if (!serverId) {
-            return NextResponse.json({ error: 'Server Id missing' }, { status: 400 });
         }
         if (!channelId) {
             return NextResponse.json({ error: 'Channel Id missing' }, { status: 400 });

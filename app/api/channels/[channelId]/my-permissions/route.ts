@@ -12,23 +12,27 @@ export async function GET(
   { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
-    const profile = await currentProfile();
+    // Run params and profile fetch in parallel
+    const [{ channelId }, profile] = await Promise.all([
+      params,
+      currentProfile()
+    ]);
+    
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { channelId } = await params;
-
-    // Get channel and member
+    // Single optimized query with select
     const channel = await db.channel.findUnique({
       where: { id: channelId },
-      include: {
+      select: {
+        id: true,
         server: {
-          include: {
+          select: {
             members: {
-              where: {
-                profileId: profile.id
-              }
+              where: { profileId: profile.id },
+              select: { id: true },
+              take: 1
             }
           }
         }

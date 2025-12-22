@@ -11,69 +11,71 @@ export async function POST(
   { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
-    const profile = await currentProfile();
+    // Run params and profile fetch in parallel
+    const [{ channelId }, profile] = await Promise.all([
+      params,
+      currentProfile()
+    ]);
 
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { channelId } = await params;
-
     if (!channelId) {
       return new NextResponse("Channel ID missing", { status: 400 });
     }
 
-    // Verify channel exists
+    // Single query to verify channel and member permission
     const channel = await db.channel.findUnique({
-      where: {
-        id: channelId,
-      },
+      where: { id: channelId },
+      select: {
+        id: true,
+        serverId: true,
+        server: {
+          select: {
+            members: {
+              where: {
+                profileId: profile.id,
+                role: { in: ["ADMIN", "MODERATOR"] }
+              },
+              select: { id: true },
+              take: 1
+            }
+          }
+        }
+      }
     });
 
     if (!channel) {
       return new NextResponse("Channel not found", { status: 404 });
     }
 
-    // Verify member has permission (admin or moderator)
-    const member = await db.member.findFirst({
-      where: {
-        serverId: channel.serverId,
-        profileId: profile.id,
-        role: {
-          in: ["ADMIN", "MODERATOR"],
-        },
-      },
-    });
-
+    const member = channel.server.members[0];
     if (!member) {
       return new NextResponse("Unauthorized - requires admin or moderator", { status: 403 });
     }
 
-    // Clear whiteboard state
-    await db.whiteboardState.upsert({
-      where: {
-        channelId,
-      },
-      update: {
-        drawingData: "[]",
-        version: 0,
-        lastEditBy: profile.id,
-        lastEditAt: new Date(),
-      },
-      create: {
-        channelId,
-        drawingData: "[]",
-        version: 0,
-        lastEditBy: profile.id,
-      },
-    });
-
-    // Optionally delete all draw commands (for cleanup)
-    await db.whiteboardDrawCommand.deleteMany({
-      where: {
-        channelId,
-      },
-    });
+    // Run both clear operations in parallel
+    await Promise.all([
+      db.whiteboardState.upsert({
+        where: { channelId },
+        update: {
+          drawingData: "[]",
+          version: 0,
+          lastEditBy: profile.id,
+          lastEditAt: new Date(),
+        },
+        create: {
+          channelId,
+          drawingData: "[]",
+          version: 0,
+          lastEditBy: profile.id,
+        },
+      }),
+      db.whiteboardDrawCommand.deleteMany({
+        where: { channelId },
+      })
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

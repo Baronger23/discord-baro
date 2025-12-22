@@ -12,32 +12,46 @@ export async function GET(
   { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
-    const profile = await currentProfile();
+    // Run params and profile fetch in parallel
+    const [{ channelId }, profile] = await Promise.all([
+      params,
+      currentProfile()
+    ]);
+    
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { channelId } = await params;
-
-    // Get channel with permissions
+    // Single optimized query with select for only needed fields
     const channel = await db.channel.findUnique({
       where: { id: channelId },
-      include: {
+      select: {
+        id: true,
+        isPrivate: true,
+        allowedRoles: true,
         channelPermissions: {
-          include: {
+          select: {
+            id: true,
+            memberId: true,
+            canView: true,
+            canSendMessages: true,
+            canManageMessages: true,
+            canInviteMembers: true,
             member: {
-              include: {
-                profile: true
+              select: {
+                profile: {
+                  select: { name: true }
+                }
               }
             }
           }
         },
         server: {
-          include: {
+          select: {
             members: {
-              where: {
-                profileId: profile.id
-              }
+              where: { profileId: profile.id },
+              select: { role: true },
+              take: 1
             }
           }
         }
@@ -84,24 +98,32 @@ export async function PATCH(
   { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
-    const profile = await currentProfile();
+    // Run params, profile and body parsing in parallel
+    const [{ channelId }, profile, body] = await Promise.all([
+      params,
+      currentProfile(),
+      req.json()
+    ]);
+    
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { channelId } = await params;
-    const { isPrivate, allowedRoles } = await req.json();
+    const { isPrivate, allowedRoles } = body;
 
-    // Get channel and check permissions
+    // Get channel and check permissions with select for minimal data
     const channel = await db.channel.findUnique({
       where: { id: channelId },
-      include: {
+      select: {
+        id: true,
+        isPrivate: true,
+        allowedRoles: true,
         server: {
-          include: {
+          select: {
             members: {
-              where: {
-                profileId: profile.id
-              }
+              where: { profileId: profile.id },
+              select: { role: true },
+              take: 1
             }
           }
         }
@@ -144,34 +166,40 @@ export async function POST(
   { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
-    const profile = await currentProfile();
+    // Run params, profile and body parsing in parallel
+    const [{ channelId }, profile, body] = await Promise.all([
+      params,
+      currentProfile(),
+      req.json()
+    ]);
+    
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { channelId } = await params;
     const { 
       memberId, 
       canView = true, 
       canSendMessages = true,
       canManageMessages = false,
       canInviteMembers = false 
-    } = await req.json();
+    } = body;
 
     if (!memberId) {
       return new NextResponse("Member ID required", { status: 400 });
     }
 
-    // Check if requester is ADMIN
+    // Check if requester is ADMIN with minimal data
     const channel = await db.channel.findUnique({
       where: { id: channelId },
-      include: {
+      select: {
+        id: true,
         server: {
-          include: {
+          select: {
             members: {
-              where: {
-                profileId: profile.id
-              }
+              where: { profileId: profile.id },
+              select: { role: true },
+              take: 1
             }
           }
         }
@@ -243,12 +271,7 @@ export async function DELETE(
   { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
-    const profile = await currentProfile();
-    if (!profile) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
-
-    const { channelId } = await params;
+    // Parse URL early for validation
     const { searchParams } = new URL(req.url);
     const memberId = searchParams.get("memberId");
 
@@ -256,16 +279,27 @@ export async function DELETE(
       return new NextResponse("Member ID required", { status: 400 });
     }
 
-    // Check if requester is ADMIN
+    // Run params and profile in parallel
+    const [{ channelId }, profile] = await Promise.all([
+      params,
+      currentProfile()
+    ]);
+    
+    if (!profile) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    // Check if requester is ADMIN with minimal data
     const channel = await db.channel.findUnique({
       where: { id: channelId },
-      include: {
+      select: {
+        id: true,
         server: {
-          include: {
+          select: {
             members: {
-              where: {
-                profileId: profile.id
-              }
+              where: { profileId: profile.id },
+              select: { role: true },
+              take: 1
             }
           }
         }

@@ -13,25 +13,30 @@ export async function POST(
   { params }: { params: Promise<{ messageId: string }> }
 ) {
   try {
-    const profile = await currentProfile();
+    // Run params and profile fetch in parallel
+    const [{ messageId }, profile] = await Promise.all([
+      params,
+      currentProfile()
+    ]);
+    
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { messageId } = await params;
-
-    // Get message with channel and server info
+    // Get message with channel and server info using select for minimal data
     const message = await db.message.findUnique({
       where: { id: messageId },
-      include: {
+      select: {
+        id: true,
+        channelId: true,
         channel: {
-          include: {
+          select: {
             server: {
-              include: {
+              select: {
                 members: {
-                  where: {
-                    profileId: profile.id
-                  }
+                  where: { profileId: profile.id },
+                  select: { id: true },
+                  take: 1
                 }
               }
             }
@@ -89,25 +94,30 @@ export async function DELETE(
   { params }: { params: Promise<{ messageId: string }> }
 ) {
   try {
-    const profile = await currentProfile();
+    // Run params and profile fetch in parallel
+    const [{ messageId }, profile] = await Promise.all([
+      params,
+      currentProfile()
+    ]);
+    
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { messageId } = await params;
-
-    // Get message with channel and server info
+    // Get message with channel and server info using select
     const message = await db.message.findUnique({
       where: { id: messageId },
-      include: {
+      select: {
+        id: true,
+        channelId: true,
         channel: {
-          include: {
+          select: {
             server: {
-              include: {
+              select: {
                 members: {
-                  where: {
-                    profileId: profile.id
-                  }
+                  where: { profileId: profile.id },
+                  select: { id: true },
+                  take: 1
                 }
               }
             }
