@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 
 export async function GET(
   req: Request,
-  { params }: { params: { channelId: string } }
+  { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
     const profile = await currentProfile();
@@ -13,7 +13,7 @@ export async function GET(
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { channelId } = params;
+    const { channelId } = await params;
 
     if (!channelId) {
       return new NextResponse("Channel ID missing", { status: 400 });
