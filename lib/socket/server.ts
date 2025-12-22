@@ -234,13 +234,25 @@ const registerCoreEvents = (io: TypedIOServer) => {
     socket.on("webrtc:join-room", ({ roomId, peerId, displayName }) => {
       console.log(`[WEBRTC] User ${displayName} (${peerId}) joining room ${roomId}`);
       
+      // Store user data in socket
+      socket.data.displayName = displayName;
+      socket.data.audioEnabled = true;
+      socket.data.videoEnabled = true;
+      socket.data.screenSharing = false;
+      
       // Join the WebRTC room
       const webrtcRoom = `webrtc:${roomId}`;
       socket.join(webrtcRoom);
 
-      // Get existing peers in the room
+      // Get existing peers in the room with their media state
       const room = io.sockets.adapter.rooms.get(webrtcRoom);
-      const existingPeers: Array<{ peerId: string; displayName: string }> = [];
+      const existingPeers: Array<{ 
+        peerId: string; 
+        displayName: string;
+        audioEnabled: boolean;
+        videoEnabled: boolean;
+        screenSharing: boolean;
+      }> = [];
       
       if (room) {
         room.forEach((socketId) => {
@@ -250,6 +262,9 @@ const registerCoreEvents = (io: TypedIOServer) => {
             existingPeers.push({
               peerId: socketId,
               displayName: peerData.displayName || "Unknown",
+              audioEnabled: peerData.audioEnabled ?? true,
+              videoEnabled: peerData.videoEnabled ?? true,
+              screenSharing: peerData.screenSharing ?? false,
             });
           }
         });
@@ -330,7 +345,16 @@ const registerCoreEvents = (io: TypedIOServer) => {
     });
 
     socket.on("webrtc:media-state", ({ roomId, audioEnabled, videoEnabled, screenSharing }) => {
-      console.log(`[WEBRTC] Broadcasting media state change from ${socket.id} in room ${roomId}`);
+      console.log(`[WEBRTC] Broadcasting media state change from ${socket.id} in room ${roomId}`, {
+        audioEnabled,
+        videoEnabled,
+        screenSharing,
+      });
+      
+      // Update socket data
+      socket.data.audioEnabled = audioEnabled;
+      socket.data.videoEnabled = videoEnabled;
+      socket.data.screenSharing = screenSharing;
       
       const webrtcRoom = `webrtc:${roomId}`;
       // Broadcast to all other users in the room

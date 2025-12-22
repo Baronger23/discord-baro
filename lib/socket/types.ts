@@ -115,7 +115,13 @@ export type ServerToClientEvents = {
     roomId: string;
     peerId: string;
     displayName: string;
-    peers: Array<{ peerId: string; displayName: string }>;
+    peers: Array<{ 
+      peerId: string; 
+      displayName: string;
+      audioEnabled?: boolean;
+      videoEnabled?: boolean;
+      screenSharing?: boolean;
+    }>;
   }) => void;
   "webrtc:user-left": (payload: {
     roomId: string;
@@ -283,4 +289,8 @@ export type SocketData = {
   avatarUrl?: string | null;
   serverIds: Set<string>;
   channelIds: Set<string>;
+  // WebRTC media state tracking
+  audioEnabled?: boolean;
+  videoEnabled?: boolean;
+  screenSharing?: boolean;
 };

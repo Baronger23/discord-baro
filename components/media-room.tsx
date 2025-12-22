@@ -186,6 +186,13 @@ export const MediaRoom = ({ chatId, video, audio }: MediaRoomProps) => {
       if (localVideoRef.current.srcObject !== localStream) {
         localVideoRef.current.srcObject = localStream;
         console.log("[MediaRoom] ✅ Attached local stream to video element");
+        
+        // Force play when metadata is loaded
+        localVideoRef.current.onloadedmetadata = () => {
+          localVideoRef.current?.play().catch(e => {
+            console.error("[MediaRoom] ❌ Local video play error:", e);
+          });
+        };
       }
       
       // Log track states
@@ -212,6 +219,13 @@ export const MediaRoom = ({ chatId, video, audio }: MediaRoomProps) => {
         localScreenVideoRef.current.srcObject = localScreenStream;
         console.log("[MediaRoom] 📺 Attached local screen stream to video element");
         
+        // Force play when metadata is loaded
+        localScreenVideoRef.current.onloadedmetadata = () => {
+          localScreenVideoRef.current?.play().catch(e => {
+            console.error("[MediaRoom] ❌ Screen video play error:", e);
+          });
+        };
+        
         // Log track info
         localScreenStream.getVideoTracks().forEach(track => {
           console.log(`[MediaRoom] Screen track: ${track.kind} label=${track.label} readyState=${track.readyState}`);
@@ -236,6 +250,13 @@ export const MediaRoom = ({ chatId, video, audio }: MediaRoomProps) => {
       if (videoElement && videoElement.srcObject !== stream) {
         videoElement.srcObject = stream;
         console.log("[MediaRoom] 🎥 Attached remote camera stream for peer:", peerId);
+        
+        // Force play when metadata is loaded
+        videoElement.onloadedmetadata = () => {
+          videoElement.play().catch(e => {
+            console.error(`[MediaRoom] ❌ Remote video play error for ${peerId}:`, e);
+          });
+        };
       }
     });
   }, [remoteStreams, participants]);
@@ -251,6 +272,13 @@ export const MediaRoom = ({ chatId, video, audio }: MediaRoomProps) => {
       if (videoElement && videoElement.srcObject !== stream) {
         videoElement.srcObject = stream;
         console.log("[MediaRoom] 📺 Attached remote screen stream for peer:", peerId);
+        
+        // Force play when metadata is loaded
+        videoElement.onloadedmetadata = () => {
+          videoElement.play().catch(e => {
+            console.error(`[MediaRoom] ❌ Remote screen video play error for ${peerId}:`, e);
+          });
+        };
       }
     });
   }, [remoteScreenStreams]);
@@ -336,7 +364,12 @@ export const MediaRoom = ({ chatId, video, audio }: MediaRoomProps) => {
   // Calculate grid layout based on participant count
   const totalParticipants = 1 + remoteStreams.size; // local + remote
   const hasAnyScreenShare = isScreenSharing || remoteScreenStreams.size > 0;
-  const gridCols = totalParticipants === 1 ? 1 : totalParticipants === 2 ? 2 : totalParticipants <= 4 ? 2 : 3;
+  // Better grid logic: 1→1col, 2→2cols, 3→3cols, 4→2cols (2x2), 5+→3cols
+  const gridCols = 
+    totalParticipants === 1 ? 1 : 
+    totalParticipants === 2 ? 2 : 
+    totalParticipants === 3 ? 3 :
+    totalParticipants === 4 ? 2 : 3;
 
   // Debug log - track state changes
   console.log("[MediaRoom] 🎬 Render state:", {
@@ -437,7 +470,10 @@ export const MediaRoom = ({ chatId, video, audio }: MediaRoomProps) => {
                 const cameraStream = remoteStreams.get(peerId);
 
                 return (
-                  <div key={`screen-${peerId}`} className="relative flex-1 bg-zinc-800 rounded-lg overflow-hidden flex items-center justify-center">
+                  <div 
+                    key={`screen-${peerId}-${screenStream.id}`} 
+                    className="relative flex-1 bg-zinc-800 rounded-lg overflow-hidden flex items-center justify-center"
+                  >
                     <video
                       ref={(el) => {
                         if (el) {
@@ -535,7 +571,10 @@ export const MediaRoom = ({ chatId, video, audio }: MediaRoomProps) => {
                     const participantName = participant?.displayName || "Unknown";
 
                     return (
-                      <div key={`camera-${peerId}`} className="relative w-48 flex-shrink-0 bg-zinc-800 rounded-lg overflow-hidden">
+                      <div 
+                        key={`camera-${peerId}-${stream.id}`} 
+                        className="relative w-48 flex-shrink-0 bg-zinc-800 rounded-lg overflow-hidden"
+                      >
                         <video
                           ref={(el) => {
                             if (el) {
@@ -582,7 +621,7 @@ export const MediaRoom = ({ chatId, video, audio }: MediaRoomProps) => {
           >
             <div
               className={cn(
-                "grid gap-4 w-full h-full",
+                "grid gap-4 w-full",
                 gridCols === 1 && "grid-cols-1",
                 gridCols === 2 && "grid-cols-2",
                 gridCols === 3 && "grid-cols-3"
@@ -590,6 +629,8 @@ export const MediaRoom = ({ chatId, video, audio }: MediaRoomProps) => {
               style={{
                 maxHeight: '100%',
                 maxWidth: '100%',
+                // Better height management for 3 columns
+                gridAutoRows: gridCols === 3 ? 'minmax(0, 1fr)' : 'auto',
               }}
             >
             {/* Local Video */}
@@ -625,7 +666,11 @@ export const MediaRoom = ({ chatId, video, audio }: MediaRoomProps) => {
               const participantName = participant?.displayName || "Unknown";
 
               return (
-                <div key={peerId} className="relative bg-zinc-800 rounded-lg overflow-hidden flex items-center justify-center" style={{ aspectRatio: '16/9', minHeight: 0 }}>
+                <div 
+                  key={`${peerId}-${stream.id}`} 
+                  className="relative bg-zinc-800 rounded-lg overflow-hidden flex items-center justify-center" 
+                  style={{ aspectRatio: '16/9', minHeight: 0 }}
+                >
                   <video
                     ref={(el) => {
                       if (el) {

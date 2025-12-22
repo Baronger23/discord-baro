@@ -69,16 +69,41 @@ export class WebRTCSignaling {
 
       if (peerId === this.socket.id) {
         // This is us joining - create offers for all existing peers
+        console.log("[SIGNALING] 🚀 We are joining, creating offers for", peers.length, "existing peers");
+        
+        // 🐢 CRITICAL: Delay 300ms to ensure remote peer has setup listeners
+        await new Promise(resolve => setTimeout(resolve, 300));
+        console.log("[SIGNALING] ⏰ Delay complete, now sending offers...");
+        
         for (const peer of peers) {
-          console.log("[SIGNALING] Creating offer for existing peer", peer.peerId);
+          console.log("[SIGNALING] Creating offer for existing peer", peer.peerId, {
+            screenSharing: peer.screenSharing,
+            audioEnabled: peer.audioEnabled,
+            videoEnabled: peer.videoEnabled,
+          });
+          
+          console.log("[SIGNALING] 📡 Calling createOfferForPeer...");
           await this.createOfferForPeer(peer.peerId, peer.displayName);
+          
+          // Update peer media state immediately if they have special state
+          if (peer.screenSharing || !peer.audioEnabled || !peer.videoEnabled) {
+            console.log("[SIGNALING] 📺 Updating existing peer media state:", peer.peerId);
+            this.webrtcClient.updatePeerMediaState(peer.peerId, {
+              audioEnabled: peer.audioEnabled ?? true,
+              videoEnabled: peer.videoEnabled ?? true,
+              screenSharing: peer.screenSharing ?? false,
+            });
+          }
         }
       } else {
         // Another user joined - they will send us an offer
         console.log("[SIGNALING] New peer will send offer", peerId, displayName);
         
-        // Pre-create peer connection so we have the displayName ready
-        await this.webrtcClient.createPeerConnection(peerId, displayName);
+        // Don't pre-create peer connection here - wait for offer
+        // This ensures screen share tracks are added if we're currently sharing
+        
+        // IMPORTANT: Store the new peer info for when we receive their offer
+        // We'll need to check if we're screen sharing and trigger renegotiation after
       }
     });
 

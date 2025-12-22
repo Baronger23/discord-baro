@@ -8,18 +8,28 @@ export const ICE_SERVERS: RTCConfiguration = {
     // Google's public STUN servers (free)
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
-    { urls: "stun:stun2.l.google.com:19302" },
-    { urls: "stun:stun3.l.google.com:19302" },
-    { urls: "stun:stun4.l.google.com:19302" },
     
-    // Optional: Add your own TURN server here for better connectivity
-    // {
-    //   urls: "turn:your-turn-server.com:3478",
-    //   username: "username",
-    //   credential: "password"
-    // }
+    // Free TURN servers for mobile/NAT traversal (Metered.ca open relay)
+    {
+      urls: "turn:openrelay.metered.ca:80",
+      username: "openrelayproject",
+      credential: "openrelayproject"
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject"
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443?transport=tcp",
+      username: "openrelayproject",
+      credential: "openrelayproject"
+    },
   ],
   iceCandidatePoolSize: 10,
+  iceTransportPolicy: "all", // Try all connection types including relay
+  bundlePolicy: "max-bundle",
+  rtcpMuxPolicy: "require",
 };
 
 // Media constraints

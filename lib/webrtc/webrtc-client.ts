@@ -23,6 +23,8 @@ export class WebRTCClient extends EventEmitter {
   private mediaManager: MediaManager;
   private connectionState: ConnectionState = "idle";
   private isJoining: boolean = false; // Prevent duplicate joins
+  // Queue for early ICE candidates (arrived before setRemoteDescription)
+  private candidateQueue: Map<string, RTCIceCandidateInit[]> = new Map();
 
   constructor() {
     super();
@@ -85,15 +87,63 @@ export class WebRTCClient extends EventEmitter {
   async createPeerConnection(peerId: string, displayName: string): Promise<RTCPeerConnection> {
     console.log("[WebRTCClient] Creating peer connection for:", peerId);
 
+    // CRITICAL: Check for zombie connection (A disconnected and rejoined)
+    const existingPeer = this.peers.get(peerId);
+    if (existingPeer) {
+      console.warn(`[WebRTCClient] 🧟 Found ZOMBIE connection for ${peerId}. Killing it now!`);
+      
+      // 1. Close old connection
+      existingPeer.connection.close();
+      
+      // 2. Remove from peers map
+      this.peers.delete(peerId);
+      
+      // 3. Clean up ICE candidate queue
+      if (this.candidateQueue.has(peerId)) {
+        this.candidateQueue.delete(peerId);
+      }
+      
+      // 4. Emit event to remove old video from UI
+      this.emit("peer-left", peerId);
+      
+      console.log("[WebRTCClient] ✅ Zombie connection killed, creating fresh peer");
+    }
+
     const peerConnection = new RTCPeerConnection(ICE_SERVERS);
 
-    // Add local stream tracks to connection
+    // Add local stream tracks to connection (camera/audio)
     const localStream = this.mediaManager.getLocalStream();
     if (localStream) {
       localStream.getTracks().forEach(track => {
         console.log(`[WebRTCClient] Adding local ${track.kind} track to peer:`, peerId);
         peerConnection.addTrack(track, localStream);
       });
+    }
+
+    // IMPORTANT: If we're already screen sharing, add screen track immediately
+    const screenStream = this.mediaManager.getScreenStream();
+    console.log(`[WebRTCClient] 🔍 Checking for existing screen stream:`, {
+      hasScreenStream: !!screenStream,
+      screenStreamId: screenStream?.id,
+      videoTracks: screenStream?.getVideoTracks().length || 0
+    });
+    
+    if (screenStream) {
+      const screenTrack = screenStream.getVideoTracks()[0];
+      if (screenTrack) {
+        console.log(`[WebRTCClient] 📺 Adding existing screen share track to new peer:`, peerId);
+        console.log(`[WebRTCClient] Screen track details:`, {
+          id: screenTrack.id,
+          label: screenTrack.label,
+          enabled: screenTrack.enabled,
+          readyState: screenTrack.readyState
+        });
+        peerConnection.addTrack(screenTrack, screenStream);
+      } else {
+        console.warn(`[WebRTCClient] ⚠️ Screen stream exists but no video track!`);
+      }
+    } else {
+      console.log(`[WebRTCClient] ℹ️ No screen stream - not currently screen sharing`);
     }
 
     // Handle remote stream - separate camera and screen
@@ -159,7 +209,18 @@ export class WebRTCClient extends EventEmitter {
     // Handle ICE candidates
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log("[WebRTCClient] New ICE candidate for:", peerId);
+        // Parse candidate type for debugging
+        const candidateStr = event.candidate.candidate;
+        const typeMatch = candidateStr.match(/typ (\w+)/);
+        const candidateType = typeMatch ? typeMatch[1] : 'unknown';
+        
+        console.log(`[WebRTCClient] 🧊 ICE candidate [${candidateType}] for ${peerId}`);
+        
+        // Important: relay = TURN server working (needed for mobile)
+        if (candidateType === 'relay') {
+          console.log("[WebRTCClient] ✅ Got TURN relay candidate - mobile connectivity enabled");
+        }
+        
         this.emit("ice-candidate", {
           peerId,
           candidate: {
@@ -168,6 +229,8 @@ export class WebRTCClient extends EventEmitter {
             sdpMLineIndex: event.candidate.sdpMLineIndex,
           },
         });
+      } else {
+        console.log("[WebRTCClient] ✅ ICE gathering complete for:", peerId);
       }
     };
 
@@ -181,8 +244,12 @@ export class WebRTCClient extends EventEmitter {
         return;
       }
       
-      console.log("[WebRTCClient] Initial setup complete:", peer.isInitialSetupComplete);
-      console.log("[WebRTCClient] Signaling state:", peerConnection.signalingState);
+      console.log("[WebRTCClient] Negotiation context:", {
+        peerId,
+        initialSetupComplete: peer.isInitialSetupComplete,
+        signalingState: peerConnection.signalingState,
+        connectionState: peerConnection.connectionState,
+      });
       
       // Skip during initial setup or if not stable
       if (!peer.isInitialSetupComplete) {
@@ -192,26 +259,48 @@ export class WebRTCClient extends EventEmitter {
       
       if (peerConnection.signalingState !== "stable") {
         console.log("[WebRTCClient] ⏭️ Skipping renegotiation - signaling state not stable:", peerConnection.signalingState);
+        console.log("[WebRTCClient] 💡 This prevents 'no pending remote description' error");
         return;
       }
 
       try {
-        console.log("[WebRTCClient] Creating renegotiation offer for:", peerId);
+        console.log("[WebRTCClient] ✅ Safe to renegotiate - creating offer for:", peerId);
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
+        
+        // Wait for ICE gathering to complete
+        if (peerConnection.iceGatheringState !== "complete") {
+          console.log("[WebRTCClient] Waiting for ICE gathering...");
+          await new Promise<void>((resolve) => {
+            const checkGathering = () => {
+              if (peerConnection.iceGatheringState === "complete") {
+                peerConnection.removeEventListener("icegatheringstatechange", checkGathering);
+                resolve();
+              }
+            };
+            peerConnection.addEventListener("icegatheringstatechange", checkGathering);
+            // Timeout after 1.5s
+            setTimeout(() => {
+              peerConnection.removeEventListener("icegatheringstatechange", checkGathering);
+              console.log("[WebRTCClient] ICE gathering timeout, proceeding anyway");
+              resolve();
+            }, 1500);
+          });
+        }
         
         // Emit renegotiation offer through signaling
         this.emit("renegotiation-needed", peerId);
         
         console.log("[WebRTCClient] ✅ Renegotiation offer created for:", peerId);
       } catch (error) {
-        console.error("[WebRTCClient] Renegotiation failed:", error);
+        console.error("[WebRTCClient] ❌ Renegotiation failed:", error);
+        console.error("[WebRTCClient] Signaling state during error:", peerConnection.signalingState);
       }
     };
 
     // Handle connection state changes
-    peerConnection.onconnectionstatechange = () => {
-      console.log("[WebRTCClient] Connection state:", peerId, peerConnection.connectionState);
+    peerConnection.onconnectionstatechange = async () => {
+      console.log("[WebRTCClient] ⚡ Connection state:", peerId, peerConnection.connectionState);
 
       const peer = this.peers.get(peerId);
       
@@ -219,17 +308,48 @@ export class WebRTCClient extends EventEmitter {
       if (peerConnection.connectionState === "connected" && peer) {
         console.log("[WebRTCClient] ✅ Connection established. Enabling renegotiation for:", peerId);
         peer.isInitialSetupComplete = true;
+        // Reset reconnect counter on success
+        peer.reconnectAttempts = 0;
+        peer.reconnecting = false;
       }
 
-      if (peerConnection.connectionState === "disconnected" || 
-          peerConnection.connectionState === "failed") {
-        this.removePeer(peerId);
+      if (peerConnection.connectionState === "disconnected") {
+        console.warn("[WebRTCClient] ⚠️ Connection disconnected for:", peerId);
+        // Give time for auto-reconnect before triggering manual restart
+        setTimeout(() => {
+          const currentPeer = this.peers.get(peerId);
+          if (currentPeer?.connection.connectionState === "disconnected") {
+            console.log("[WebRTCClient] Still disconnected, attempting ICE restart...");
+            this.attemptReconnection(peerId);
+          }
+        }, 1000);
+      }
+
+      if (peerConnection.connectionState === "failed") {
+        console.error("[WebRTCClient] ❌ Connection FAILED for:", peerId);
+        // Try to reconnect instead of immediate removal
+        await this.attemptReconnection(peerId);
       }
     };
 
     // Handle ICE connection state
     peerConnection.oniceconnectionstatechange = () => {
-      console.log("[WebRTCClient] ICE connection state:", peerId, peerConnection.iceConnectionState);
+      console.log("[WebRTCClient] ⚡ ICE state:", peerId, peerConnection.iceConnectionState);
+      
+      if (peerConnection.iceConnectionState === "connected" || 
+          peerConnection.iceConnectionState === "completed") {
+        console.log("[WebRTCClient] ✅ ICE connected for:", peerId);
+      }
+      
+      if (peerConnection.iceConnectionState === "failed") {
+        console.error("[WebRTCClient] ❌ ICE FAILED for:", peerId);
+        console.error("[WebRTCClient] Common causes: mobile NAT, firewall, no TURN relay");
+      }
+    };
+
+    // Handle ICE gathering state
+    peerConnection.onicegatheringstatechange = () => {
+      console.log("[WebRTCClient] 🔍 ICE gathering:", peerId, peerConnection.iceGatheringState);
     };
 
     // Store peer connection
@@ -243,6 +363,8 @@ export class WebRTCClient extends EventEmitter {
       videoEnabled: true,
       screenSharing: false,
       isInitialSetupComplete: false,  // Will be set to true when connection established
+      reconnectAttempts: 0,  // Track reconnection tries
+      reconnecting: false,  // Reconnection in progress flag
     });
 
     console.log("[WebRTCClient] Peer connection created for:", peerId, displayName);
@@ -255,10 +377,40 @@ export class WebRTCClient extends EventEmitter {
    * Create and send offer to a peer
    */
   async createOffer(peerId: string, displayName: string): Promise<RTCSessionDescriptionInit> {
+    console.log("[WebRTCClient] 📤 createOffer called for:", peerId, displayName);
+    
+    // Check if we have screen stream BEFORE creating peer connection
+    const screenStream = this.mediaManager.getScreenStream();
+    console.log("[WebRTCClient] 🔍 Screen stream status BEFORE peer creation:", {
+      hasScreenStream: !!screenStream,
+      screenStreamId: screenStream?.id,
+      videoTracks: screenStream?.getVideoTracks().length || 0
+    });
+    
     // Check if peer connection already exists
     let peerConnection = this.peers.get(peerId)?.connection;
     if (!peerConnection) {
+      console.log("[WebRTCClient] Creating NEW peer connection in createOffer for:", peerId);
       peerConnection = await this.createPeerConnection(peerId, displayName);
+    } else {
+      console.log("[WebRTCClient] Using EXISTING peer connection for:", peerId);
+      
+      // CRITICAL: If we're screen sharing and peer connection exists,
+      // check if screen track is already added. If not, add it NOW before creating offer.
+      if (screenStream) {
+        const screenTrack = screenStream.getVideoTracks()[0];
+        if (screenTrack) {
+          const senders = peerConnection.getSenders();
+          const screenTrackExists = senders.some(sender => sender.track?.id === screenTrack.id);
+          
+          if (!screenTrackExists) {
+            console.log("[WebRTCClient] 📺 Existing peer missing screen track - adding now!");
+            peerConnection.addTrack(screenTrack, screenStream);
+          } else {
+            console.log("[WebRTCClient] ✅ Screen track already in existing peer connection");
+          }
+        }
+      }
     }
 
     // Create offer with consistent constraints
@@ -267,6 +419,27 @@ export class WebRTCClient extends EventEmitter {
       offerToReceiveVideo: true,
     });
     await peerConnection.setLocalDescription(offer);
+
+    // Wait for ICE gathering to include all candidates (especially TURN relay)
+    if (peerConnection.iceGatheringState !== "complete") {
+      console.log("[WebRTCClient] Waiting for ICE candidates before sending offer...");
+      await new Promise<void>((resolve) => {
+        const checkGathering = () => {
+          if (peerConnection!.iceGatheringState === "complete") {
+            console.log("[WebRTCClient] ✅ ICE gathering complete");
+            peerConnection!.removeEventListener("icegatheringstatechange", checkGathering);
+            resolve();
+          }
+        };
+        peerConnection.addEventListener("icegatheringstatechange", checkGathering);
+        // Timeout after 1.5s
+        setTimeout(() => {
+          peerConnection!.removeEventListener("icegatheringstatechange", checkGathering);
+          console.log("[WebRTCClient] 🔄 ICE gathering timeout during reconnection");
+          resolve();
+        }, 1500);
+      });
+    }
 
     console.log("[WebRTCClient] Created offer for:", peerId);
 
@@ -281,35 +454,71 @@ export class WebRTCClient extends EventEmitter {
     displayName: string,
     offer: RTCSessionDescriptionInit
   ): Promise<RTCSessionDescriptionInit> {
+    console.log("[WebRTCClient] 📨 handleOffer called for:", peerId, displayName);
+    
     // Check if peer connection already exists
     let peerConnection = this.peers.get(peerId)?.connection;
+    const peerExists = !!peerConnection;
+    console.log("[WebRTCClient] Peer connection exists:", peerExists);
+    
+    // CRITICAL: Check for signaling state conflicts (Glare - both sides sending offer)
+    if (peerConnection && peerConnection.signalingState !== "stable") {
+      console.warn(`[WebRTCClient] ⚠️ Signaling state conflict detected: ${peerConnection.signalingState}`);
+      console.warn("[WebRTCClient] ⚠️ Rejecting offer to avoid glare condition");
+      
+      // If we're in an unstable state, reject this offer to prevent "no pending remote description" error
+      // This can happen when both peers send offers simultaneously
+      throw new Error(`Cannot accept offer while in ${peerConnection.signalingState} state`);
+    }
+    
     if (!peerConnection) {
+      console.log("[WebRTCClient] Creating NEW peer connection in handleOffer for:", peerId);
       peerConnection = await this.createPeerConnection(peerId, displayName);
+    } else {
+      console.log("[WebRTCClient] Using EXISTING peer connection for:", peerId);
     }
 
     console.log("[WebRTCClient] Handling offer from:", peerId);
+    console.log("[WebRTCClient] Signaling state before setRemoteDescription:", peerConnection.signalingState);
     console.log("[WebRTCClient] Offer tracks:", offer.sdp?.match(/m=/g)?.length || 0);
 
-    // Set remote description first
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    try {
+      // Set remote description first (MUST complete before createAnswer)
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+      console.log("[WebRTCClient] ✅ Set remote description (offer) - State now:", peerConnection.signalingState);
+      
+      // CRITICAL: Flush any queued ICE candidates that arrived before setRemoteDescription
+      await this.flushIceCandidateQueue(peerId);
 
-    // Create answer - WebRTC will automatically match the m-line order from offer
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
+      // Verify we're in the correct state to create answer
+      if (peerConnection.signalingState !== "have-remote-offer") {
+        console.error("[WebRTCClient] ❌ Invalid state for createAnswer:", peerConnection.signalingState);
+        throw new Error(`Cannot create answer in ${peerConnection.signalingState} state`);
+      }
 
-    console.log("[WebRTCClient] Created answer for:", peerId);
-    
-    // Emit peer-joined event after answer is created
-    this.emit("peer-joined", {
-      id: peerId,
-      displayName,
-      audioEnabled: true,
-      videoEnabled: true,
-      screenSharing: false,
-      joinedAt: new Date(),
-    });
+      // Create answer - WebRTC will automatically match the m-line order from offer
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
 
-    return answer;
+      console.log("[WebRTCClient] ✅ Created and set answer for:", peerId);
+      console.log("[WebRTCClient] Final signaling state:", peerConnection.signalingState);
+      
+      // Emit peer-joined event after answer is created
+      this.emit("peer-joined", {
+        id: peerId,
+        displayName,
+        audioEnabled: true,
+        videoEnabled: true,
+        screenSharing: false,
+        joinedAt: new Date(),
+      });
+
+      return answer;
+    } catch (error) {
+      console.error("[WebRTCClient] ❌ Error in handleOffer:", error);
+      console.error("[WebRTCClient] Peer state:", peerConnection.signalingState);
+      throw error;
+    }
   }
 
   /**
@@ -328,6 +537,9 @@ export class WebRTCClient extends EventEmitter {
     if (peer.connection.signalingState === "have-local-offer") {
       await peer.connection.setRemoteDescription(new RTCSessionDescription(answer));
       console.log("[WebRTCClient] ✅ Set remote description (answer) for:", peerId);
+      
+      // CRITICAL: Flush any queued ICE candidates that arrived before setRemoteDescription
+      await this.flushIceCandidateQueue(peerId);
       
       // Emit peer-joined event after connection is established
       this.emit("peer-joined", {
@@ -348,14 +560,27 @@ export class WebRTCClient extends EventEmitter {
    */
   async addIceCandidate(peerId: string, candidate: IceCandidate): Promise<void> {
     const peer = this.peers.get(peerId);
+    
+    // CASE 1: Peer doesn't exist yet (candidate arrived before offer)
     if (!peer) {
-      console.warn("[WebRTCClient] No peer connection found for:", peerId);
+      console.log(`[WebRTCClient] 📦 Peer ${peerId} not found yet. Storing candidate in PENDING queue.`);
+      
+      // Store in pending queue - will be flushed when peer connection is created
+      const queue = this.candidateQueue.get(peerId) || [];
+      queue.push({
+        candidate: candidate.candidate,
+        sdpMid: candidate.sdpMid,
+        sdpMLineIndex: candidate.sdpMLineIndex,
+      });
+      this.candidateQueue.set(peerId, queue);
+      console.log("[WebRTCClient] 📦 Pending queue size for", peerId, ":", queue.length);
       return;
     }
 
     try {
-      // Check if remote description is set before adding candidate
-      if (peer.connection.remoteDescription) {
+      // CASE 2: Peer exists and remote description is set
+      if (peer.connection.remoteDescription && peer.connection.remoteDescription.type) {
+        // Remote description ready - add candidate immediately
         await peer.connection.addIceCandidate(
           new RTCIceCandidate({
             candidate: candidate.candidate,
@@ -363,12 +588,122 @@ export class WebRTCClient extends EventEmitter {
             sdpMLineIndex: candidate.sdpMLineIndex,
           })
         );
-        console.log("[WebRTCClient] Added ICE candidate for:", peerId);
+        console.log("[WebRTCClient] ✅ Added ICE candidate for:", peerId);
       } else {
-        console.warn("[WebRTCClient] Remote description not set yet, ignoring ICE candidate for:", peerId);
+        // CASE 3: Peer exists but remote description not ready yet
+        console.warn("[WebRTCClient] ⏳ Queueing ICE candidate (RemoteDesc not ready) for:", peerId);
+        
+        const queue = this.candidateQueue.get(peerId) || [];
+        queue.push({
+          candidate: candidate.candidate,
+          sdpMid: candidate.sdpMid,
+          sdpMLineIndex: candidate.sdpMLineIndex,
+        });
+        this.candidateQueue.set(peerId, queue);
+        console.log("[WebRTCClient] Queue size for", peerId, ":", queue.length);
       }
     } catch (error) {
       console.error("[WebRTCClient] Failed to add ICE candidate:", error);
+    }
+  }
+
+  /**
+   * Flush queued ICE candidates after setRemoteDescription
+   */
+  private async flushIceCandidateQueue(peerId: string): Promise<void> {
+    const queue = this.candidateQueue.get(peerId);
+    if (!queue || queue.length === 0) {
+      return;
+    }
+
+    const peer = this.peers.get(peerId);
+    if (!peer) {
+      console.warn("[WebRTCClient] No peer found when flushing ICE queue for:", peerId);
+      return;
+    }
+
+    console.log(`[WebRTCClient] 🚀 Flushing ${queue.length} queued ICE candidates for:`, peerId);
+
+    for (const candidate of queue) {
+      try {
+        await peer.connection.addIceCandidate(new RTCIceCandidate(candidate));
+        console.log("[WebRTCClient] ✅ Added queued ICE candidate");
+      } catch (error) {
+        console.error("[WebRTCClient] Failed to add queued ICE candidate:", error);
+      }
+    }
+
+    // Clear queue after flushing
+    this.candidateQueue.delete(peerId);
+    console.log("[WebRTCClient] ✅ ICE candidate queue flushed for:", peerId);
+  }
+
+  /**
+   * Attempt to reconnect using ICE restart
+   */
+  private async attemptReconnection(peerId: string): Promise<void> {
+    const peer = this.peers.get(peerId);
+    if (!peer || peer.reconnecting) {
+      return;
+    }
+
+    const maxAttempts = 3;
+    const currentAttempt = (peer.reconnectAttempts || 0) + 1;
+
+    if (currentAttempt > maxAttempts) {
+      console.error(`[WebRTCClient] Max reconnection attempts (${maxAttempts}) reached for:`, peerId);
+      this.removePeer(peerId);
+      return;
+    }
+
+    peer.reconnectAttempts = currentAttempt;
+    peer.reconnecting = true;
+
+    console.log(`[WebRTCClient] 🔄 Reconnection attempt ${currentAttempt}/${maxAttempts} for:`, peerId);
+
+    try {
+      // ICE restart: create new offer with iceRestart option
+      const offer = await peer.connection.createOffer({ iceRestart: true });
+      await peer.connection.setLocalDescription(offer);
+
+      console.log("[WebRTCClient] ✅ ICE restart offer created");
+
+      // Wait for ICE gathering
+      if (peer.connection.iceGatheringState !== "complete") {
+        await new Promise<void>((resolve) => {
+          const checkGathering = () => {
+            if (peer.connection.iceGatheringState === "complete") {
+              peer.connection.removeEventListener("icegatheringstatechange", checkGathering);
+              resolve();
+            }
+          };
+          peer.connection.addEventListener("icegatheringstatechange", checkGathering);
+          setTimeout(() => {
+            peer.connection.removeEventListener("icegatheringstatechange", checkGathering);
+            resolve();
+          }, 1500);
+        });
+      }
+
+      // Notify signaling to send ICE restart offer
+      this.emit("ice-restart-needed", peerId);
+
+      // Check reconnection result after 5s
+      setTimeout(() => {
+        const currentPeer = this.peers.get(peerId);
+        if (currentPeer && currentPeer.connection.connectionState !== "connected") {
+          console.warn(`[WebRTCClient] ⚠️ Reconnection ${currentAttempt} failed, will retry...`);
+          currentPeer.reconnecting = false;
+          // Exponential backoff: 1s, 2s, 4s
+          const delay = Math.min(1000 * Math.pow(2, currentAttempt - 1), 8000);
+          setTimeout(() => this.attemptReconnection(peerId), delay);
+        }
+      }, 5000);
+    } catch (error) {
+      console.error("[WebRTCClient] ICE restart error:", error);
+      peer.reconnecting = false;
+      const delay = Math.min(1000 * Math.pow(2, currentAttempt - 1), 8000);
+      setTimeout(() => this.attemptReconnection(peerId), delay);
     }
   }
 
@@ -380,6 +715,13 @@ export class WebRTCClient extends EventEmitter {
     if (peer) {
       peer.connection.close();
       this.peers.delete(peerId);
+      
+      // Clean up ICE candidate queue for this peer
+      if (this.candidateQueue.has(peerId)) {
+        console.log("[WebRTCClient] Cleaning up ICE candidate queue for:", peerId);
+        this.candidateQueue.delete(peerId);
+      }
+      
       this.emit("peer-left", peerId);
       console.log("[WebRTCClient] Removed peer:", peerId);
     }
@@ -407,6 +749,8 @@ export class WebRTCClient extends EventEmitter {
   async startScreenShare(): Promise<void> {
     try {
       console.log("[WebRTCClient] 📺 Starting screen share (dual stream mode)");
+      console.log("[WebRTCClient] Current peers count:", this.peers.size);
+      console.log("[WebRTCClient] Existing peers:", Array.from(this.peers.keys()));
       
       const screenStream = await this.mediaManager.getScreenShare();
       const screenTrack = screenStream.getVideoTracks()[0];

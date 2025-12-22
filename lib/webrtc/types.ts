@@ -28,6 +28,8 @@ export interface PeerConnection {
   videoEnabled: boolean;
   screenSharing: boolean;
   isInitialSetupComplete: boolean;  // Track if initial negotiation is done
+  reconnectAttempts?: number;  // Track reconnection attempts
+  reconnecting?: boolean;  // Currently reconnecting flag
 }
 
 export interface LocalMediaState {
