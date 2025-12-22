@@ -19,7 +19,9 @@ export interface UseWebRTCOptions {
 export interface UseWebRTCReturn {
   // Media streams
   localStream: MediaStream | null;
-  remoteStreams: Map<string, MediaStream>;
+  localScreenStream: MediaStream | null;  // NEW: separate screen stream
+  remoteStreams: Map<string, MediaStream>;  // Camera streams
+  remoteScreenStreams: Map<string, MediaStream>;  // NEW: Screen share streams
   participants: RoomParticipant[];
 
   // Connection state
@@ -54,7 +56,9 @@ export const useWebRTC = (options: UseWebRTCOptions): UseWebRTCReturn => {
 
   // State
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
+  const [remoteScreenStreams, setRemoteScreenStreams] = useState<Map<string, MediaStream>>(new Map());
   const [participants, setParticipants] = useState<RoomParticipant[]>([]);
   const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
   const [audioEnabled, setAudioEnabled] = useState(options.audio !== false);
@@ -97,20 +101,55 @@ export const useWebRTC = (options: UseWebRTCOptions): UseWebRTCReturn => {
       }
     });
 
-    webrtcClient.on("remote-stream", (peerId: string, stream: MediaStream) => {
-      console.log("[useWebRTC] Remote stream received from:", peerId);
-      setRemoteStreams((prev) => new Map(prev).set(peerId, stream));
+    // NEW: Handle local screen stream separately
+    webrtcClient.on("local-screen-stream", (stream: MediaStream) => {
+      console.log("[useWebRTC] Local screen stream ready");
+      setLocalScreenStream(stream);
+      setIsScreenSharing(true);
+    });
+
+    // Updated: Handle remote streams with type (camera or screen)
+    webrtcClient.on("remote-stream", (peerId: string, stream: MediaStream, streamType: any) => {
+      console.log(`[useWebRTC] 📥 Remote ${streamType} stream received from:`, peerId);
+      console.log(`[useWebRTC] Stream details:`, {
+        id: stream.id,
+        active: stream.active,
+        videoTracks: stream.getVideoTracks().length,
+        audioTracks: stream.getAudioTracks().length,
+        videoTrackEnabled: stream.getVideoTracks()[0]?.enabled,
+        audioTrackEnabled: stream.getAudioTracks()[0]?.enabled,
+      });
+      
+      if (streamType === "screen") {
+        setRemoteScreenStreams((prev) => {
+          const newMap = new Map(prev).set(peerId, stream);
+          console.log(`[useWebRTC] ✅ Updated remoteScreenStreams Map. Size: ${newMap.size}`);
+          return newMap;
+        });
+      } else {
+        setRemoteStreams((prev) => {
+          const newMap = new Map(prev).set(peerId, stream);
+          console.log(`[useWebRTC] ✅ Updated remoteStreams Map. Size: ${newMap.size}`);
+          return newMap;
+        });
+      }
     });
 
     webrtcClient.on("peer-joined", (participant: RoomParticipant) => {
-      console.log("[useWebRTC] Peer joined:", participant.id, participant.displayName);
+      console.log("[useWebRTC] ✅ Peer joined:", participant.id);
+      console.log("[useWebRTC] Participant details:", {
+        displayName: participant.displayName,
+        audioEnabled: participant.audioEnabled,
+        videoEnabled: participant.videoEnabled,
+      });
       setParticipants((prev) => {
         // Check if already exists
         const exists = prev.find((p) => p.id === participant.id);
         if (exists) {
-          console.log("[useWebRTC] Peer already in list, updating");
+          console.log("[useWebRTC] Peer already in list, updating with new data");
           return prev.map((p) => (p.id === participant.id ? participant : p));
         }
+        console.log("[useWebRTC] Adding new peer to participants list");
         return [...prev, participant];
       });
     });
@@ -119,6 +158,11 @@ export const useWebRTC = (options: UseWebRTCOptions): UseWebRTCReturn => {
       console.log("[useWebRTC] Peer left:", peerId);
       setParticipants((prev) => prev.filter((p) => p.id !== peerId));
       setRemoteStreams((prev) => {
+        const next = new Map(prev);
+        next.delete(peerId);
+        return next;
+      });
+      setRemoteScreenStreams((prev) => {
         const next = new Map(prev);
         next.delete(peerId);
         return next;
@@ -140,6 +184,28 @@ export const useWebRTC = (options: UseWebRTCOptions): UseWebRTCReturn => {
           return p;
         })
       );
+      
+      // Clear remote screen stream if screen sharing stopped
+      if (mediaState.screenSharing === false) {
+        console.log("[useWebRTC] Remote peer stopped screen sharing:", peerId);
+        setRemoteScreenStreams((prev) => {
+          const next = new Map(prev);
+          next.delete(peerId);
+          return next;
+        });
+      }
+    });
+
+    // Listen to local media state changes
+    webrtcClient.on("media-state-changed", (state) => {
+      console.log("[useWebRTC] Local media state changed:", state);
+      
+      // Clear local screen stream when screen sharing stops
+      if (state.screenSharing === false) {
+        console.log("[useWebRTC] 🧹 Clearing local screen stream (screen share stopped)");
+        setLocalScreenStream(null);
+        setIsScreenSharing(false);
+      }
     });
 
     webrtcClient.on("connection-state-change", (state: ConnectionState) => {
@@ -208,8 +274,11 @@ export const useWebRTC = (options: UseWebRTCOptions): UseWebRTCReturn => {
     setHasJoined(false);
     setConnectionState("disconnected");
     setLocalStream(null);
+    setLocalScreenStream(null);
     setRemoteStreams(new Map());
+    setRemoteScreenStreams(new Map());
     setParticipants([]);
+    setIsScreenSharing(false);
   }, []);
 
   /**
@@ -246,6 +315,7 @@ export const useWebRTC = (options: UseWebRTCOptions): UseWebRTCReturn => {
     } catch (err) {
       console.error("[useWebRTC] Failed to start screen share:", err);
       setError(err as Error);
+      setIsScreenSharing(false);
     }
   }, []);
 
@@ -255,8 +325,14 @@ export const useWebRTC = (options: UseWebRTCOptions): UseWebRTCReturn => {
   const stopScreenShare = useCallback(() => {
     if (!webrtcClientRef.current) return;
 
+    console.log("[useWebRTC] 🛑 Stopping screen share...");
     webrtcClientRef.current.stopScreenShare();
+    
+    // Immediately update state
     setIsScreenSharing(false);
+    setLocalScreenStream(null);
+    
+    console.log("[useWebRTC] ✅ Screen share state cleared");
   }, []);
 
   /**
@@ -294,7 +370,9 @@ export const useWebRTC = (options: UseWebRTCOptions): UseWebRTCReturn => {
   return {
     // Media streams
     localStream,
+    localScreenStream,
     remoteStreams,
+    remoteScreenStreams,
     participants,
 
     // Connection state

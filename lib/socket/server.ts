@@ -342,6 +342,32 @@ const registerCoreEvents = (io: TypedIOServer) => {
         screenSharing,
       });
     });
+
+    // NEW: Renegotiation handlers for dual streams
+    socket.on("webrtc:renegotiate-offer", ({ to, roomId, offer }) => {
+      console.log(`[WEBRTC] 🔄 Relaying renegotiation offer from ${socket.id} to ${to} in room ${roomId}`);
+      
+      // Relay the renegotiation offer to the target peer
+      io.to(to).emit("webrtc:renegotiate-offer", {
+        from: socket.id,
+        to,
+        roomId,
+        offer,
+      });
+    });
+
+    socket.on("webrtc:renegotiate-answer", ({ to, roomId, answer }) => {
+      console.log(`[WEBRTC] 🔄 Relaying renegotiation answer from ${socket.id} to ${to} in room ${roomId}`);
+      
+      // Relay the renegotiation answer to the target peer
+      io.to(to).emit("webrtc:renegotiate-answer", {
+        from: socket.id,
+        to,
+        roomId,
+        answer,
+      });
+    });
+
     // ============================================
     // WHITEBOARD EVENTS
     // ============================================

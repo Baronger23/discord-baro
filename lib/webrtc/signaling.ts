@@ -12,6 +12,7 @@ export class WebRTCSignaling {
   private webrtcClient: WebRTCClient;
   private roomId: string | null = null;
   private peerId: string | null = null;
+  private displayName: string | null = null;
 
   constructor(
     socket: Socket<ServerToClientEvents, ClientToServerEvents>,
@@ -29,6 +30,7 @@ export class WebRTCSignaling {
   public joinRoom(roomId: string, displayName: string): void {
     this.roomId = roomId;
     this.peerId = this.socket.id || `peer-${Date.now()}`;
+    this.displayName = displayName;
 
     console.log("[SIGNALING] Joining room", { roomId, peerId: this.peerId, displayName });
 
@@ -143,6 +145,85 @@ export class WebRTCSignaling {
         screenSharing,
       });
     });
+
+    // NEW: Handle renegotiation offer (for dual streams)
+    this.socket.on("webrtc:renegotiate-offer", async ({ from, to, roomId, offer }) => {
+      console.log("[SIGNALING] 🔄 Received renegotiation offer from", from);
+      console.log("[SIGNALING] Offer SDP tracks:", offer.sdp?.match(/m=/g)?.length || 0);
+
+      try {
+        const peer = this.webrtcClient['peers'].get(from);
+        if (!peer) {
+          console.error("[SIGNALING] Peer not found for renegotiation:", from);
+          return;
+        }
+
+        const peerConnection = peer.connection;
+
+        // Log current state
+        console.log("[SIGNALING] Current signaling state:", peerConnection.signalingState);
+        console.log("[SIGNALING] Current transceivers:", peerConnection.getTransceivers().length);
+        
+        if (peerConnection.signalingState !== "stable") {
+          console.warn("[SIGNALING] ⚠️ Signaling state not stable for offer. Got:", peerConnection.signalingState);
+          // Don't return, proceed anyway - remote offer can override local state
+        }
+
+        // Set remote description (the new offer)
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        console.log("[SIGNALING] ✅ Set remote description for renegotiation");
+        console.log("[SIGNALING] After setRemoteDescription - transceivers:", peerConnection.getTransceivers().length);
+
+        // Create answer
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        console.log("[SIGNALING] ✅ Created renegotiation answer");
+        console.log("[SIGNALING] Answer SDP tracks:", answer.sdp?.match(/m=/g)?.length || 0);
+
+        // Send answer back
+        this.socket.emit("webrtc:renegotiate-answer", {
+          to: from,
+          roomId,
+          answer: {
+            type: answer.type,
+            sdp: answer.sdp,
+          } as RTCSessionDescriptionInit,
+        });
+
+        console.log("[SIGNALING] ✅ Sent renegotiation answer to", from);
+      } catch (error) {
+        console.error("[SIGNALING] Error handling renegotiation offer:", error);
+      }
+    });
+
+    // NEW: Handle renegotiation answer (for dual streams)
+    this.socket.on("webrtc:renegotiate-answer", async ({ from, to, roomId, answer }) => {
+      console.log("[SIGNALING] 🔄 Received renegotiation answer from", from);
+
+      try {
+        const peer = this.webrtcClient['peers'].get(from);
+        if (!peer) {
+          console.error("[SIGNALING] Peer not found for renegotiation:", from);
+          return;
+        }
+
+        const peerConnection = peer.connection;
+
+        // Check signaling state before setting remote description
+        console.log("[SIGNALING] Current signaling state:", peerConnection.signalingState);
+        
+        if (peerConnection.signalingState !== "have-local-offer") {
+          console.warn("[SIGNALING] ⚠️ Wrong signaling state for answer. Expected 'have-local-offer', got:", peerConnection.signalingState);
+          return;
+        }
+
+        // Set remote description (the answer)
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log("[SIGNALING] ✅ Set remote description for renegotiation answer");
+      } catch (error) {
+        console.error("[SIGNALING] Error handling renegotiation answer:", error);
+      }
+    });
   }
 
   /**
@@ -184,6 +265,42 @@ export class WebRTCSignaling {
         screenSharing: state.screenSharing,
       });
     });
+
+    // NEW: Handle renegotiation for dual streams
+    this.webrtcClient.on("renegotiation-needed", async (peerId) => {
+      if (!this.roomId) return;
+
+      console.log("[SIGNALING] 🔄 Renegotiation needed for peer:", peerId);
+
+      try {
+        const peer = this.webrtcClient['peers'].get(peerId);
+        if (!peer) {
+          console.error("[SIGNALING] Peer not found for renegotiation:", peerId);
+          return;
+        }
+
+        const peerConnection = peer.connection;
+        const localDescription = peerConnection.localDescription;
+
+        if (!localDescription) {
+          console.error("[SIGNALING] No local description for renegotiation");
+          return;
+        }
+
+        console.log("[SIGNALING] Sending renegotiation offer to", peerId);
+
+        this.socket.emit("webrtc:renegotiate-offer", {
+          to: peerId,
+          roomId: this.roomId,
+          offer: {
+            type: localDescription.type,
+            sdp: localDescription.sdp,
+          } as RTCSessionDescriptionInit,
+        });
+      } catch (error) {
+        console.error("[SIGNALING] Error handling renegotiation:", error);
+      }
+    });
   }
 
   /**
@@ -201,7 +318,7 @@ export class WebRTCSignaling {
         to: peerId,
         roomId: this.roomId,
         offer,
-        displayName: this.socket.id || "Unknown",
+        displayName: this.displayName || "Unknown",
       });
 
       console.log("[SIGNALING] Sent offer to", peerId);
@@ -222,6 +339,9 @@ export class WebRTCSignaling {
     this.socket.off("webrtc:offer");
     this.socket.off("webrtc:answer");
     this.socket.off("webrtc:ice-candidate");
+    this.socket.off("webrtc:media-state");
+    this.socket.off("webrtc:renegotiate-offer");
+    this.socket.off("webrtc:renegotiate-answer");
 
     // Leave the room
     this.leaveRoom();
