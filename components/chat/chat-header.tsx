@@ -4,6 +4,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import { SocketIndicator } from "@/components/socket-indicator";
 import { ChatVideoButton } from "@/components/chat/chat-video-button";
 import { PinnedMessagesButton } from "@/components/chat/pinned-messages-button";
+import { MessageSearchButton } from "@/components/chat/message-search-button";
 
 interface ChatHeaderProps {
     serverId: string;
@@ -47,6 +48,12 @@ export const ChatHeader = ({
                 )}
                 {type === "conversation" && conversationId && (
                     <PinnedMessagesButton conversationId={conversationId} type="conversation" />
+                )}
+                {type === "channel" && channelId && (
+                    <MessageSearchButton channelId={channelId} type="channel" />
+                )}
+                {type === "conversation" && conversationId && (
+                    <MessageSearchButton conversationId={conversationId} type="conversation" />
                 )}
                 {type === "conversation" && (
                   <ChatVideoButton/>  

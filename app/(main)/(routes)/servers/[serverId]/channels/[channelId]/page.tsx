@@ -46,6 +46,7 @@ const ChannelIdPage = async ({
             />
             {channel.type == ChannelType.TEXT && (
                <>
+                {/* <div className="flex-1"></div> */}
                 <ChatMessages
                     name={channel.name}
                     member={member}

@@ -71,6 +71,11 @@ const ViewPinnedMessagesModal = dynamic(
     { ssr: false }
 );
 
+const SearchMessagesModal = dynamic(
+    () => import("@/components/modals/search-messages-modal").then(mod => ({ default: mod.SearchMessagesModal })),
+    { ssr: false }
+);
+
 export const ModalProvider = () => {
     const [isMounted, setIsMounted] = useState(false);
     
@@ -99,6 +104,7 @@ export const ModalProvider = () => {
             <DeleteMessageModal />
             <ManageChannelPermissionsModal />
             <ViewPinnedMessagesModal />
+            <SearchMessagesModal />
         </>
     );
 };

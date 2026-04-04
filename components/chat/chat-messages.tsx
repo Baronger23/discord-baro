@@ -8,6 +8,7 @@ import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { Loader2, ServerCrash } from "lucide-react";
 import { ChatItem } from "@/components/chat/chat-item";
 import { format } from "date-fns";
+import { useModal } from "@/hooks/use-modal-store";
 
 const DATE_FORMAT = "d MMM, yyyy HH:mm";
 
@@ -62,6 +63,7 @@ export const ChatMessages = ({
     paramValue,
     type
 }: ChatMessagesProps) => {
+    const { onOpen } = useModal();
     const queryKey = `chat:${chatId}`;
     const chatRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
@@ -122,6 +124,55 @@ export const ChatMessages = ({
             highlight(target);
         }
     }, [fetchNextPage]);
+
+    useEffect(() => {
+        const handleJump = (event: Event) => {
+            const customEvent = event as CustomEvent<{
+                chatType: "channel" | "conversation";
+                chatId: string;
+                messageId: string;
+            }>;
+
+            const detail = customEvent.detail;
+            if (!detail) {
+                return;
+            }
+
+            if (detail.chatType !== type || detail.chatId !== paramValue) {
+                return;
+            }
+
+            void jumpToMessage(detail.messageId);
+        };
+
+        window.addEventListener("chat:jump-to-message", handleJump);
+
+        return () => {
+            window.removeEventListener("chat:jump-to-message", handleJump);
+        };
+    }, [jumpToMessage, type, paramValue]);
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "f") {
+                return;
+            }
+
+            event.preventDefault();
+
+            onOpen("searchMessages", {
+                channelId: type === "channel" ? paramValue : undefined,
+                conversationId: type === "conversation" ? paramValue : undefined,
+                type,
+            });
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [onOpen, type, paramValue]);
 
     useChatSocket({
         queryKey,
