@@ -18,6 +18,9 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.31.9",
+    "@giphy/js-fetch-api": "^5.7.0",
+    "@giphy/js-types": "^5.1.0",
+    "@giphy/react-components": "^10.1.1",
     "@hookform/resolvers": "^5.2.1",
     "@livekit/components-react": "^2.9.15",
     "@livekit/components-styles": "^1.1.6",

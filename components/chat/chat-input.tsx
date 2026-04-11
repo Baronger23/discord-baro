@@ -16,6 +16,7 @@ import { useReplyStore } from "@/hooks/use-reply-store";
 import { EmojiPicker } from "../emoji-picker";
 import { useChannelPermissions } from "@/hooks/use-channel-permissions";
 import { useParams } from "next/navigation";
+import { MediaPicker } from "@/components/chat/media-picker";
 
 interface ChatInputProps {
     apiUrl: string;
@@ -54,6 +55,24 @@ export const ChatInput = ({
             content: "",
         }
     });
+
+    const sendMediaMessage = async (fileUrl: string) => {
+        const replyPayload = activeReply
+            ? (type === "channel"
+                ? { replyToMessageId: activeReply.id }
+                : { replyToDirectMessageId: activeReply.id })
+            : {};
+
+        await axios.post(apiUrl, {
+            content: " ",
+            fileUrl,
+            ...query,
+            ...replyPayload,
+        });
+
+        clearReply();
+    };
+
     const isLoading  = form.formState.isSubmitting;
     const onSubmit = async (values: z.infer<typeof formSchema>) => {
         try {
@@ -149,6 +168,28 @@ export const ChatInput = ({
                                         {...field}
                                     />
                                     <div className="absolute top-7 right-8 flex items-center gap-2">
+                                        <MediaPicker
+                                            kind="sticker"
+                                            disabled={isLoading || (type === "channel" && !canSendMessages)}
+                                            onPick={async (item) => {
+                                                try {
+                                                    await sendMediaMessage(item.url);
+                                                } catch (error) {
+                                                    console.error("Error sending sticker:", error);
+                                                }
+                                            }}
+                                        />
+                                        <MediaPicker
+                                            kind="gif"
+                                            disabled={isLoading || (type === "channel" && !canSendMessages)}
+                                            onPick={async (item) => {
+                                                try {
+                                                    await sendMediaMessage(item.url);
+                                                } catch (error) {
+                                                    console.error("Error sending GIF:", error);
+                                                }
+                                            }}
+                                        />
                                         <EmojiPicker
                                             onChange={(emoji: string) => field.onChange(`${field.value}${emoji}`)}
                                         />
