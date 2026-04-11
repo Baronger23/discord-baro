@@ -112,9 +112,23 @@ const registerMiddleware = (io: TypedIOServer) => {
 };
 
 const registerCoreEvents = (io: TypedIOServer) => {
-  io.on("connection", (socket: TypedSocket) => {
+  io.on("connection", async (socket: TypedSocket) => {
     const profileId = socket.data.profileId;
     console.log(`[SOCKET] 🔌 New connection from profileId: ${profileId}, socketId: ${socket.id}`);
+
+    // Auto-join all member rooms for call notifications
+    try {
+      const members = await db.member.findMany({
+        where: { profileId },
+        select: { id: true },
+      });
+      members.forEach(member => {
+        socket.join(`member:${member.id}`);
+        console.log(`[SOCKET] Auto-joined member room: member:${member.id}`);
+      });
+    } catch (error) {
+      console.error("[SOCKET] Failed to auto-join member rooms:", error);
+    }
 
     socket.on(SOCKET_EVENTS.CHAT_JOIN, async ({ serverId, channelId }: ChatJoinPayload) => {
       try {
@@ -221,8 +235,114 @@ const registerCoreEvents = (io: TypedIOServer) => {
       socket.broadcast.to(channelRoom(channelId)).emit(SOCKET_EVENTS.CHAT_TYPING, typingPayload);
     });
 
-    socket.on(SOCKET_EVENTS.PRESENCE_PING, ({ channels }: PresencePingPayload) => {
-      channels.forEach((channelId) => presenceManager.touch(channelId, profileId));
+    // Handle incoming call
+    socket.on("call:initiate", async ({ conversationId, calleeId, callerName, callerAvatar, timestamp }) => {
+      try {
+        const callId = `${profileId}-${calleeId}-${Date.now()}`;
+
+        const conversation = await db.conversation.findUnique({
+          where: { id: conversationId },
+          select: {
+            memberOne: {
+              select: {
+                serverId: true,
+              },
+            },
+          },
+        });
+
+        if (!conversation) {
+          socket.emit("call:declined", { callId, conversationId });
+          return;
+        }
+
+        // Find callee member to get their socket rooms
+        const calleeMember = await db.member.findUnique({
+          where: { id: calleeId },
+          include: { profile: true },
+        });
+
+        if (!calleeMember) {
+          socket.emit("call:declined", { callId, conversationId });
+          return;
+        }
+
+        const callerMember = await db.member.findFirst({
+          where: {
+            profileId,
+            serverId: conversation.memberOne.serverId,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        if (!callerMember) {
+          socket.emit("call:declined", { callId, conversationId });
+          return;
+        }
+
+        // Send incoming call notification to callee via member room
+        const memberRoom = `member:${calleeId}`;
+        socket.broadcast.to(memberRoom).emit("call:incoming", {
+          callId,
+          callerId: profileId,
+          callerMemberId: callerMember.id,
+          callerName,
+          callerAvatar,
+          serverId: conversation.memberOne.serverId,
+          conversationId,
+          timestamp,
+        });
+
+        console.log(`[SOCKET] 📞 Call initiated from ${profileId} to ${calleeId}`);
+      } catch (error) {
+        console.error("[SOCKET] Failed to initiate call:", error);
+      }
+    });
+
+    // Handle call acceptance
+    socket.on("call:accept", ({ callId, conversationId }) => {
+      try {
+        const conversationRoom = `conversation:${conversationId}`;
+        socket.broadcast.to(conversationRoom).emit("call:accepted", { callId, conversationId });
+        console.log(`[SOCKET] ✅ Call accepted: ${callId}`);
+      } catch (error) {
+        console.error("[SOCKET] Failed to accept call:", error);
+      }
+    });
+
+    // Handle call decline
+    socket.on("call:decline", ({ callId, conversationId }) => {
+      try {
+        const conversationRoom = `conversation:${conversationId}`;
+        socket.broadcast.to(conversationRoom).emit("call:declined", { callId, conversationId });
+        console.log(`[SOCKET] ❌ Call declined: ${callId}`);
+      } catch (error) {
+        console.error("[SOCKET] Failed to decline call:", error);
+      }
+    });
+
+    // Handle call end
+    socket.on("call:end", ({ conversationId, calleeId, timestamp }) => {
+      try {
+        const memberRoom = `member:${calleeId}`;
+        socket.broadcast.to(memberRoom).emit("call:ended", { conversationId, timestamp });
+        console.log(`[SOCKET] 📞 Call ended for conversationId: ${conversationId}`);
+      } catch (error) {
+        console.error("[SOCKET] Failed to end call:", error);
+      }
+    });
+
+    socket.on(SOCKET_EVENTS.PRESENCE_PING, ({ timestamp }: PresencePingPayload) => {
+      // Update user status to ONLINE
+      db.profile.update({
+        where: { id: profileId },
+        data: {
+          status: "ONLINE",
+          lastSeenAt: new Date(),
+        },
+      }).catch(err => console.error("[SOCKET] Failed to update presence:", err));
     });
 
     socket.on("disconnect", () => {

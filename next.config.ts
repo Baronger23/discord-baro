@@ -11,6 +11,11 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
+        hostname: '69bd2e482a477922072f2fc2610f9bbe.r2.cloudflarestorage.com',
+        pathname: '/discord-app/**',
+      },
+      {
+        protocol: 'https',
         hostname: 'utfs.io',
         pathname: '/**',
       },

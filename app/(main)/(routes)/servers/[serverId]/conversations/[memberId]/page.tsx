@@ -61,6 +61,7 @@ const MemberIdPage = async ({
                 serverId={serverId}
                 type="conversation"
                 conversationId={conversation.id}
+                memberId={otherMember.id}
             />
             {video && (
                 <MediaRoom

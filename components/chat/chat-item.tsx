@@ -129,8 +129,19 @@ const ChatItemComponent = ({
 
     const isLoading = form.formState.isSubmitting;
 
-    const fileType = fileUrl?.split('.').pop()?.toLowerCase();
-    const fileName = fileUrl?.split('/').pop() || 'file';
+    const getFileNameFromUrl = (url: string) => {
+        try {
+            const parsedUrl = new URL(url);
+            return decodeURIComponent(parsedUrl.pathname.split('/').filter(Boolean).pop() || 'file');
+        } catch {
+            return decodeURIComponent(url.split('/').filter(Boolean).pop() || 'file');
+        }
+    };
+
+    const fileName = fileUrl ? getFileNameFromUrl(fileUrl) : 'file';
+    const fileType = fileName.includes('.')
+        ? fileName.split('.').pop()?.toLowerCase()
+        : undefined;
 
     const isAdmin = currentMember.role === MemberRole.ADMIN;
     const isModerator = currentMember.role === MemberRole.MODERATOR;

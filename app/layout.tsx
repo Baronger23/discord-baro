@@ -15,6 +15,8 @@ import { ThemeProvider } from '@/components/providers/theme-provider'
 import { cn } from '@/lib/utils'
 import { ModalProvider } from '@/components/providers/modal-provider'
 import { SocketProvider } from '@/components/providers/socket-provider'
+import { IncomingCallModal } from '@/components/incoming-call-modal'
+import { PresenceTracker } from '@/components/presence-tracker'
 const geistSans = Geist({
   variable: '--font-geist-sans',
   subsets: ['latin'],
@@ -80,6 +82,8 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             <SocketProvider>
+              <PresenceTracker />
+              <IncomingCallModal />
               <ModalProvider />
               <QueryProvider>
                 {children}

@@ -65,6 +65,32 @@ export type ServerToClientEvents = {
     preview: string;
     senderName?: string; // Tên người gửi
   }) => void;
+  "call:incoming": (payload: {
+    callId: string;
+    callerId: string;
+    callerMemberId?: string;
+    callerName: string;
+    callerAvatar?: string;
+    serverId: string;
+    conversationId: string;
+    timestamp: number;
+  }) => void;
+  "call:accepted": (payload: {
+    callId: string;
+    conversationId: string;
+  }) => void;
+  "call:declined": (payload: {
+    callId: string;
+    conversationId: string;
+  }) => void;
+  "call:cancelled": (payload: {
+    callId: string;
+    conversationId: string;
+  }) => void;
+  "call:ended": (payload: {
+    conversationId: string;
+    timestamp: number;
+  }) => void;
 };
 
 export type ClientToServerEvents = {
@@ -88,7 +114,27 @@ export type ClientToServerEvents = {
     messageId: string;
   }) => void;
   "presence:ping": (payload: {
-    channels: string[];
+    timestamp: number;
+  }) => void;
+  "call:initiate": (payload: {
+    conversationId: string;
+    calleeId: string;
+    callerName: string;
+    callerAvatar?: string;
+    timestamp: number;
+  }) => void;
+  "call:accept": (payload: {
+    callId: string;
+    conversationId: string;
+  }) => void;
+  "call:decline": (payload: {
+    callId: string;
+    conversationId: string;
+  }) => void;
+  "call:end": (payload: {
+    conversationId: string;
+    calleeId: string;
+    timestamp: number;
   }) => void;
 };
 

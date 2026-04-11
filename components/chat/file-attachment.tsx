@@ -9,11 +9,19 @@ interface FileAttachmentProps {
 }
 
 export const FileAttachment = ({ fileUrl, fileName }: FileAttachmentProps) => {
-  // Extract filename from URL if not provided
-  const displayName = fileName || fileUrl.split('/').pop() || 'file';
-  
-  // Detect file type from URL
-  const fileExtension = displayName.split('.').pop()?.toLowerCase();
+  const getFileNameFromUrl = (url: string) => {
+    try {
+      const parsedUrl = new URL(url);
+      return decodeURIComponent(parsedUrl.pathname.split('/').filter(Boolean).pop() || 'file');
+    } catch {
+      return decodeURIComponent(url.split('/').filter(Boolean).pop() || 'file');
+    }
+  };
+
+  const displayName = fileName || getFileNameFromUrl(fileUrl);
+  const fileExtension = displayName.includes('.')
+    ? displayName.split('.').pop()?.toLowerCase()
+    : getFileNameFromUrl(fileUrl).split('.').pop()?.toLowerCase();
   
   const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(fileExtension || '');
   const isPDF = fileExtension === 'pdf';
@@ -27,17 +35,24 @@ export const FileAttachment = ({ fileUrl, fileName }: FileAttachmentProps) => {
           href={fileUrl} 
           target="_blank" 
           rel="noopener noreferrer"
+          title={`Open ${displayName}`}
+          aria-label={`Open ${displayName}`}
           className="block rounded-lg overflow-hidden border border-zinc-200 hover:border-zinc-300 transition"
         >
-          <img
+          <Image
             src={fileUrl}
             alt={displayName}
+            width={800}
+            height={600}
+            unoptimized
             className="w-full h-auto object-cover"
           />
         </a>
         <a
           href={fileUrl}
           download
+          title={`Download ${displayName}`}
+          aria-label={`Download ${displayName}`}
           className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition"
           onClick={(e) => e.stopPropagation()}
         >

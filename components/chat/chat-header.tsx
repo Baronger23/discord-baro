@@ -13,6 +13,7 @@ interface ChatHeaderProps {
     imageUrl?: string;
     channelId?: string;
     conversationId?: string;
+    memberId?: string;
 }
 
 export const ChatHeader = ({
@@ -21,7 +22,8 @@ export const ChatHeader = ({
     type,
     imageUrl,
     channelId,
-    conversationId
+    conversationId,
+    memberId
 }: ChatHeaderProps) => {
     
     return (
@@ -56,7 +58,7 @@ export const ChatHeader = ({
                     <MessageSearchButton conversationId={conversationId} type="conversation" />
                 )}
                 {type === "conversation" && (
-                  <ChatVideoButton/>  
+                  <ChatVideoButton conversationId={conversationId} memberId={memberId} />  
                 )}
                 <SocketIndicator />
             </div>

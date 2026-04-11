@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
 
     if (action === 'list') {
       // List user's files
-      const files = await listFiles('discord-files', `${user.id}/`);
+      const files = await listFiles(process.env.MINIO_BUCKET_NAME || 'discord-files', `${user.id}/`);
       return NextResponse.json({ files });
     }
 

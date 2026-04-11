@@ -12,6 +12,13 @@ datasource db {
   provider = "postgresql"
 }
 
+enum UserStatus {
+  ONLINE
+  IDLE
+  DND
+  OFFLINE
+}
+
 model Profile {
   id       String @id @default(uuid())
   userId   String @unique
@@ -19,15 +26,19 @@ model Profile {
   imageUrl String @db.Text
   email    String @db.Text
 
+  status     UserStatus @default(OFFLINE)
+  lastSeenAt DateTime   @default(now())
+
   servers  Server[]
   members  Member[]
   channels Channel[]
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([userId]) // Tìm profile bằng Clerk userId
   @@index([email]) // Search/filter by email
+  @@index([status]) // Filter by status
 }
 
 model Server {
@@ -193,7 +204,7 @@ model Conversation {
   directMessages DirectMessage[]
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@unique([memberOneId, memberTwoId]) // Đảm bảo unique conversation
   @@index([memberOneId]) // Lấy conversations của memberOne
