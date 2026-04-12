@@ -1,6 +1,6 @@
 "use client";
 import { Fragment, useCallback, useEffect, useRef } from "react";
-import { Member, Profile, Message } from "@prisma/client";
+import type { Member, Profile, Message } from "@prisma/client";
 import { ChatWelcome } from "@/components/chat/chat-welcome";
 import { useChatQuery } from "@/hooks/use-chat-query";
 import { useChatSocket } from "@/hooks/use-chat-socket";

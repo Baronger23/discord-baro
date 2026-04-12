@@ -14,7 +14,8 @@
     "db:studio": "npx prisma studio",
     "db:benchmark": "npx ts-node scripts/benchmark-db.ts",
     "db:analyze": "psql -U postgres -d discord_db -f database-analysis.sql",
-    "dev:full": "npm run docker:up && timeout /t 10 && npm run db:migrate && npm run dev"
+    "dev:full": "npm run docker:up && timeout /t 10 && npm run db:migrate && npm run dev",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.31.9",

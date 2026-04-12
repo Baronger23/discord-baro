@@ -1,20 +1,34 @@
 "use client";
 
-import { Member, MemberRole, Profile, Server } from ".prisma/client/default.js";
 import { cn } from "@/lib/utils";
-import { ShieldAlert, ShieldCheck, User } from "lucide-react";
-import { useParams, useRouter } from "next/dist/client/components/navigation";
+import { ShieldAlert, ShieldCheck } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
 import { UserAvatar } from "../user-avatar";
 
+type MemberRole = "ADMIN" | "MODERATOR" | "GUEST";
+
+interface ServerMemberData {
+    id: string;
+    role: MemberRole;
+    profile: {
+        imageUrl: string;
+        name: string;
+    } | null;
+}
+
+interface ServerData {
+    id: string;
+}
+
 interface ServerMemberProps {
-    member: Member & { profile: Profile | null };
-    server: Server;
+    member: ServerMemberData;
+    server: ServerData;
 }
 
 const IconMap= {
-    [MemberRole.GUEST]: null,
-    [MemberRole.MODERATOR]: <ShieldCheck className="mr-2 h-4 ml-2 text-indigo-500" />,
-    [MemberRole.ADMIN]: <ShieldAlert className="mr-2 h-4 ml-2 text-rose-500" />,
+    GUEST: null,
+    MODERATOR: <ShieldCheck className="mr-2 h-4 ml-2 text-indigo-500" />,
+    ADMIN: <ShieldAlert className="mr-2 h-4 ml-2 text-rose-500" />,
 }
 export const ServerMember = ({
     member,

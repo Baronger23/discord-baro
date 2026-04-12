@@ -14,7 +14,8 @@ export const NavigationAction = () => {
                 align="center"
                 label="Add a server"
             >
-                <button 
+                <button
+                    title="create server" 
                     onClick={() => onOpen("createServer")}
                     className="group flex items-center"
                 >

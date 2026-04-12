@@ -320,6 +320,12 @@ export const getFileUrl = async (
   bucketName: string = DEFAULT_BUCKET_NAME,
   expirySeconds: number = DEFAULT_PRESIGNED_EXPIRY_SECONDS
 ): Promise<string> => {
+  const shouldUsePresignedGetUrl = process.env.MINIO_USE_PRESIGNED_GET_URL !== 'false';
+
+  if (!shouldUsePresignedGetUrl) {
+    return `${DEFAULT_UPLOAD_BASE_URL}/${fileName}`;
+  }
+
   try {
     return await minioClient.presignedGetObject(bucketName, fileName, expirySeconds);
   } catch (error) {

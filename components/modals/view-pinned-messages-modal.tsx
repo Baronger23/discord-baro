@@ -14,8 +14,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Pin, X, Loader2, FileIcon } from "lucide-react";
 import { format } from "date-fns";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { normalizeMediaUrl } from "@/lib/media-url";
 
 interface PinnedMessage {
   id: string;
@@ -148,6 +148,11 @@ export const ViewPinnedMessagesModal = () => {
           <ScrollArea className="max-h-[500px] px-6 pb-6">
             <div className="space-y-4">
               {pinnedMessages.map((message) => (
+                (() => {
+                  const safeProfileImageUrl = normalizeMediaUrl(message.member.profile.imageUrl);
+                  const safeFileUrl = message.fileUrl ? normalizeMediaUrl(message.fileUrl) : null;
+
+                  return (
                 <div
                   key={message.id}
                   onClick={() => handleScrollToMessage(message.id)}
@@ -156,11 +161,10 @@ export const ViewPinnedMessagesModal = () => {
                   {/* Avatar */}
                   <div className="flex-shrink-0">
                     <div className="relative h-10 w-10 rounded-full overflow-hidden">
-                      <Image
-                        src={message.member.profile.imageUrl}
+                      <img
+                        src={safeProfileImageUrl}
                         alt={message.member.profile.name}
-                        fill
-                        className="object-cover"
+                        className="w-full h-full object-cover"
                       />
                     </div>
                   </div>
@@ -181,33 +185,35 @@ export const ViewPinnedMessagesModal = () => {
                     </p>
 
                     {/* File attachment */}
-                    {message.fileUrl && (
+                    {safeFileUrl && (
                       <div className="mt-2">
-                        {isImage(message.fileUrl) ? (
+                        {isImage(safeFileUrl) ? (
                           <a
-                            href={message.fileUrl}
+                            href={safeFileUrl}
                             target="_blank"
                             rel="noopener noreferrer"
+                            title="Open attachment"
+                            aria-label="Open attachment"
                             className="relative block max-w-sm rounded-md overflow-hidden"
                           >
-                            <Image
-                              src={message.fileUrl}
+                            <img
+                              src={safeFileUrl}
                               alt="Attachment"
-                              width={400}
-                              height={300}
-                              className="object-cover"
+                              className="w-full h-auto object-cover"
                             />
                           </a>
                         ) : (
                           <a
-                            href={message.fileUrl}
+                            href={safeFileUrl}
                             target="_blank"
                             rel="noopener noreferrer"
+                            title="Open attachment"
+                            aria-label="Open attachment"
                             className="flex items-center gap-x-2 p-2 rounded-md bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 transition w-fit"
                           >
                             <FileIcon className="h-5 w-5 text-indigo-500" />
                             <span className="text-sm text-indigo-500 hover:underline">
-                              {isPDF(message.fileUrl) ? "PDF File" : "File Attachment"}
+                              {isPDF(safeFileUrl) ? "PDF File" : "File Attachment"}
                             </span>
                           </a>
                         )}
@@ -238,6 +244,8 @@ export const ViewPinnedMessagesModal = () => {
                     </Button>
                   </div>
                 </div>
+                  );
+                })()
               ))}
             </div>
           </ScrollArea>

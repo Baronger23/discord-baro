@@ -25,7 +25,7 @@ import {
     DropdownMenuTrigger,
     DropdownMenuSubTrigger
 } from "@/components/ui/dropdown-menu"
-import { Member, MemberRole } from "@prisma/client";
+import { MEMBER_ROLE, type MemberRole } from "@/lib/client-prisma";
 import { useRouter } from "next/navigation";
 
 const roleIconMap = {
@@ -129,7 +129,7 @@ export const MembersModal = () => {
                                                 <DropdownMenuPortal>
                                                     <DropdownMenuSubContent>
                                                         <DropdownMenuItem 
-                                                            onClick={() => onRolechange(member.id, "GUEST")}
+                                                            onClick={() => onRolechange(member.id, MEMBER_ROLE.GUEST)}
                                                         >
                                                             <Shield className="w-4 h-4 mr-2"/>
                                                             Guest
@@ -137,7 +137,7 @@ export const MembersModal = () => {
                                                             <Check className="h-4 w-4 ml-auto"/>}
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
-                                                            onClick={() => onRolechange(member.id, "MODERATOR")}
+                                                            onClick={() => onRolechange(member.id, MEMBER_ROLE.MODERATOR)}
                                                         >
                                                             <ShieldCheck className="w-4 h-4 mr-2"/>
                                                             Moderator

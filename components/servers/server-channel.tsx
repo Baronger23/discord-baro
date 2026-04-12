@@ -1,12 +1,13 @@
 "use client";
-import { Channel, MemberRole, Server } from "@prisma/client";
-import { ChannelType } from "@prisma/client";
 import { Hash, Mic, Video, Trash, Edit, Lock, Settings } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ActionTooltip } from "../ui/action-tooltip";
 import { useModal } from "@/hooks/use-modal-store";
+import { CHANNEL_TYPE, type ChannelType, MEMBER_ROLE, type MemberRole } from "@/lib/client-prisma";
+import type { Channel, Server } from "@prisma/client";
+
 interface ServerChannelProps {
     channel: Channel;
     server: Server;
@@ -14,9 +15,9 @@ interface ServerChannelProps {
 }
 
 const iconMap: Partial<Record<ChannelType, LucideIcon>> = {
-    [ChannelType.TEXT]: Hash,
-    [ChannelType.AUDIO]: Mic,
-    [ChannelType.VIDEO]: Video,
+    [CHANNEL_TYPE.TEXT]: Hash,
+    [CHANNEL_TYPE.AUDIO]: Mic,
+    [CHANNEL_TYPE.VIDEO]: Video,
 }
 
 export const ServerChannel = ({
@@ -57,9 +58,9 @@ export const ServerChannel = ({
             )}
             {/* TODO: Thêm badge số unread messages */}
             {/* <span className="ml-auto mr-2 bg-red-500 text-white text-xs rounded-full px-2 py-0.5">3</span> */}
-            {channel.name !== "general" && role !== MemberRole.GUEST && (
+            {channel.name !== "general" && role !== MEMBER_ROLE.GUEST && (
                 <div className="ml-auto flex items-center gap-x-2">
-                    {role === MemberRole.ADMIN && (
+                    {role === MEMBER_ROLE.ADMIN && (
                         <ActionTooltip label="Manage Permissions">
                             <Settings 
                                 onClick={(e) => {

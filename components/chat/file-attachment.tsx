@@ -1,7 +1,7 @@
 "use client";
 
 import { FileIcon, Download } from "lucide-react";
-import Image from "next/image";
+import { getMediaFileName, normalizeMediaUrl } from "@/lib/media-url";
 
 interface FileAttachmentProps {
   fileUrl: string;
@@ -9,19 +9,12 @@ interface FileAttachmentProps {
 }
 
 export const FileAttachment = ({ fileUrl, fileName }: FileAttachmentProps) => {
-  const getFileNameFromUrl = (url: string) => {
-    try {
-      const parsedUrl = new URL(url);
-      return decodeURIComponent(parsedUrl.pathname.split('/').filter(Boolean).pop() || 'file');
-    } catch {
-      return decodeURIComponent(url.split('/').filter(Boolean).pop() || 'file');
-    }
-  };
+  const safeFileUrl = normalizeMediaUrl(fileUrl);
 
-  const displayName = fileName || getFileNameFromUrl(fileUrl);
+  const displayName = fileName || getMediaFileName(fileUrl);
   const fileExtension = displayName.includes('.')
     ? displayName.split('.').pop()?.toLowerCase()
-    : getFileNameFromUrl(fileUrl).split('.').pop()?.toLowerCase();
+    : getMediaFileName(fileUrl).split('.').pop()?.toLowerCase();
   
   const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(fileExtension || '');
   const isPDF = fileExtension === 'pdf';
@@ -32,24 +25,21 @@ export const FileAttachment = ({ fileUrl, fileName }: FileAttachmentProps) => {
     return (
       <div className="relative mt-2 max-w-sm">
         <a 
-          href={fileUrl} 
+          href={safeFileUrl} 
           target="_blank" 
           rel="noopener noreferrer"
           title={`Open ${displayName}`}
           aria-label={`Open ${displayName}`}
           className="block rounded-lg overflow-hidden border border-zinc-200 hover:border-zinc-300 transition"
         >
-          <Image
-            src={fileUrl}
+          <img
+            src={safeFileUrl}
             alt={displayName}
-            width={800}
-            height={600}
-            unoptimized
             className="w-full h-auto object-cover"
           />
         </a>
         <a
-          href={fileUrl}
+          href={safeFileUrl}
           download
           title={`Download ${displayName}`}
           aria-label={`Download ${displayName}`}
@@ -69,7 +59,7 @@ export const FileAttachment = ({ fileUrl, fileName }: FileAttachmentProps) => {
           controls 
           className="w-full rounded-lg border border-zinc-200"
         >
-          <source src={fileUrl} type={`video/${fileExtension}`} />
+          <source src={safeFileUrl} type={`video/${fileExtension}`} />
           Your browser does not support video playback.
         </video>
       </div>
@@ -83,7 +73,7 @@ export const FileAttachment = ({ fileUrl, fileName }: FileAttachmentProps) => {
           controls 
           className="w-full"
         >
-          <source src={fileUrl} type={`audio/${fileExtension}`} />
+          <source src={safeFileUrl} type={`audio/${fileExtension}`} />
           Your browser does not support audio playback.
         </audio>
       </div>
@@ -93,7 +83,7 @@ export const FileAttachment = ({ fileUrl, fileName }: FileAttachmentProps) => {
   // Generic file (PDF, DOC, etc.)
   return (
     <a
-      href={fileUrl}
+      href={safeFileUrl}
       target="_blank"
       rel="noopener noreferrer"
       className="flex items-center mt-2 p-3 max-w-sm bg-zinc-50 dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition group"

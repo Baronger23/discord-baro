@@ -1,5 +1,4 @@
 "use client";
-import { MemberRole } from ".prisma/client/default.js";
 import { ServerWithMembersWithProfile } from "@/type";
 import {
     DropdownMenu, 
@@ -19,6 +18,14 @@ import {
 import { DropdownMenuSeparator } from "@radix-ui/react-dropdown-menu";
 import { useModal } from "@/hooks/use-modal-store";
 
+type MemberRole = "ADMIN" | "MODERATOR" | "GUEST";
+
+const MEMBER_ROLE = {
+    ADMIN: "ADMIN",
+    MODERATOR: "MODERATOR",
+    GUEST: "GUEST",
+} as const;
+
 interface ServerHeaderProps {
     server: ServerWithMembersWithProfile,
     role?: MemberRole;
@@ -29,8 +36,8 @@ export const ServerHeader = ({
     role
 }: ServerHeaderProps) => {
     const { onOpen } = useModal();
-    const isAdmin = role === MemberRole.ADMIN;
-    const isModerator = isAdmin || role === MemberRole.MODERATOR;
+    const isAdmin = role === MEMBER_ROLE.ADMIN;
+    const isModerator = isAdmin || role === MEMBER_ROLE.MODERATOR;
     return ( 
         <div>
             <DropdownMenu>

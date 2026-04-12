@@ -1,10 +1,10 @@
 "use client";
 
-import { MemberRole, ChannelType } from "@prisma/client";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { ServerWithMembersWithProfile } from "@/type";
 import { Plus, Settings } from "lucide-react";
 import { useModal } from "@/hooks/use-modal-store";
+import { MEMBER_ROLE, type MemberRole, type ChannelType } from "@/lib/client-prisma";
 interface ServerSectionProps {
     label: string;
     role?: MemberRole;
@@ -28,7 +28,7 @@ export const ServerSection = ({
             text-zinc-500 dark:text-zinc-400">
                 {label}
             </p>
-            {role !== MemberRole.GUEST && sectionType == "channels" && (
+            {role !== MEMBER_ROLE.GUEST && sectionType == "channels" && (
                 <ActionTooltip label={`Create Channel`} side="top">
                     <button
                         onClick={() => onOpen("createChannel", { channelType, server })}
@@ -39,7 +39,7 @@ export const ServerSection = ({
                     </button>
                 </ActionTooltip>
             )}
-            {role === MemberRole.ADMIN && sectionType == "members" && (
+            {role === MEMBER_ROLE.ADMIN && sectionType == "members" && (
                 <ActionTooltip label={`Manage Members`} side="top">
                     <button
                         onClick={() => onOpen("members", {server})}

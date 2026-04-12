@@ -32,7 +32,7 @@ import {
     SelectTrigger,
     SelectValue
 } from "@/components/ui/select";
-import { ChannelType } from "@prisma/client";
+import { CHANNEL_TYPE, CHANNEL_TYPES } from "@/lib/client-prisma";
 const formSchema = z.object({
     name: z.string().min(1, { message: "Server name is required" }).max(100, { message: "Server name must be less than 100 characters" }).refine(
         name => name !== "general", 
@@ -40,7 +40,7 @@ const formSchema = z.object({
             message: "Channel name cannot be 'general'"
         }
     ),
-    type: z.nativeEnum(ChannelType)
+    type: z.enum(CHANNEL_TYPES)
 });
 
 export const CreateChannelModal = () => {
@@ -55,7 +55,7 @@ export const CreateChannelModal = () => {
         resolver: zodResolver(formSchema),
         defaultValues: {
             name: "",
-            type: channelType || ChannelType.TEXT,
+            type: channelType || CHANNEL_TYPE.TEXT,
         },
     });
     const isLoading = form.formState.isSubmitting;
@@ -72,7 +72,7 @@ export const CreateChannelModal = () => {
             form.setValue("type", channelType);
         }
         else {
-            form.setValue("type", ChannelType.TEXT);
+            form.setValue("type", CHANNEL_TYPE.TEXT);
         }
     }, [channelType, form]);
     const onSubmit = async (values: z.infer<typeof formSchema>) => {
@@ -152,7 +152,7 @@ export const CreateChannelModal = () => {
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                {Object.values(ChannelType).map((type) => (
+                                                {CHANNEL_TYPES.map((type) => (
                                                     <SelectItem key={type} value={type} className="capitalize">
                                                         {type.toLowerCase()}
                                                     </SelectItem>

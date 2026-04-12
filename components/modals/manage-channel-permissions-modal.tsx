@@ -1,7 +1,6 @@
 "use client";
 import axios from "axios";
 import { useState, useEffect } from "react";
-import { MemberRole } from "@prisma/client";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MEMBER_ROLE, MEMBER_ROLES, type MemberRole } from "@/lib/client-prisma";
 
 interface ServerMember {
   id: string;
@@ -64,9 +64,9 @@ export const ManageChannelPermissionsModal = () => {
   const [permissionData, setPermissionData] = useState<ChannelPermissionData | null>(null);
   const [isPrivate, setIsPrivate] = useState(false);
   const [allowedRoles, setAllowedRoles] = useState<MemberRole[]>([
-    MemberRole.ADMIN,
-    MemberRole.MODERATOR,
-    MemberRole.GUEST,
+    MEMBER_ROLE.ADMIN,
+    MEMBER_ROLE.MODERATOR,
+    MEMBER_ROLE.GUEST,
   ]);
   const [serverMembers, setServerMembers] = useState<ServerMember[]>([]);
   const [selectedMemberId, setSelectedMemberId] = useState<string>("");
@@ -127,7 +127,7 @@ export const ManageChannelPermissionsModal = () => {
   };
 
   const handleToggleRole = (role: MemberRole) => {
-    if (role === MemberRole.ADMIN) return; // ADMIN always has access
+    if (role === MEMBER_ROLE.ADMIN) return; // ADMIN always has access
 
     setAllowedRoles((prev) => {
       if (prev.includes(role)) {
@@ -180,9 +180,9 @@ export const ManageChannelPermissionsModal = () => {
   };
 
   const roleIconMap = {
-    [MemberRole.GUEST]: <Shield className="h-4 w-4 text-gray-500" />,
-    [MemberRole.MODERATOR]: <ShieldCheck className="h-4 w-4 text-indigo-500" />,
-    [MemberRole.ADMIN]: <ShieldAlert className="h-4 w-4 text-rose-500" />,
+    [MEMBER_ROLE.GUEST]: <Shield className="h-4 w-4 text-gray-500" />,
+    [MEMBER_ROLE.MODERATOR]: <ShieldCheck className="h-4 w-4 text-indigo-500" />,
+    [MEMBER_ROLE.ADMIN]: <ShieldAlert className="h-4 w-4 text-rose-500" />,
   };
 
   return (
@@ -232,13 +232,13 @@ export const ManageChannelPermissionsModal = () => {
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold">Allowed Roles</Label>
                   <div className="space-y-2">
-                    {Object.values(MemberRole).map((role) => (
+                    {MEMBER_ROLES.map((role) => (
                       <div key={role} className="flex items-center space-x-2">
                         <Checkbox
                           id={`role-${role}`}
                           checked={allowedRoles.includes(role)}
                           onCheckedChange={() => handleToggleRole(role)}
-                          disabled={loading || role === MemberRole.ADMIN}
+                          disabled={loading || role === MEMBER_ROLE.ADMIN}
                         />
                         <Label
                           htmlFor={`role-${role}`}
@@ -246,7 +246,7 @@ export const ManageChannelPermissionsModal = () => {
                         >
                           {roleIconMap[role]}
                           <span>{role}</span>
-                          {role === MemberRole.ADMIN && (
+                          {role === MEMBER_ROLE.ADMIN && (
                             <span className="text-xs text-zinc-500">(Always has access)</span>
                           )}
                         </Label>
@@ -294,7 +294,7 @@ export const ManageChannelPermissionsModal = () => {
                           // Filter out members who already have access
                           !permissionData?.permissions.some(p => p.memberId === member.id) &&
                           // Filter out ADMINs (they always have access)
-                          member.role !== MemberRole.ADMIN
+                          member.role !== MEMBER_ROLE.ADMIN
                         )
                         .map((member) => (
                           <SelectItem key={member.id} value={member.id}>
@@ -306,7 +306,7 @@ export const ManageChannelPermissionsModal = () => {
                         ))}
                       {serverMembers.filter((member) => 
                         !permissionData?.permissions.some(p => p.memberId === member.id) &&
-                        member.role !== MemberRole.ADMIN
+                        member.role !== MEMBER_ROLE.ADMIN
                       ).length === 0 && (
                         <SelectItem value="no-members" disabled>
                           No members available to invite

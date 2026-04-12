@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, memo } from "react";
-import { Member, MemberRole, Profile } from "@prisma/client";
 import { UserAvatar } from "@/components/user-avatar";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { 
@@ -21,7 +20,6 @@ import {
     PinOff,
     Reply,
 } from "lucide-react";
-import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -34,18 +32,32 @@ import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { useModal } from "@/hooks/use-modal-store";
 import { useReplyStore } from "@/hooks/use-reply-store";
+import { getMediaFileName, normalizeMediaUrl } from "@/lib/media-url";
+import { MEMBER_ROLE, type MemberRole } from "@/lib/client-prisma";
+
+interface ChatMember {
+    id: string;
+    role: MemberRole;
+    profile: {
+        name: string;
+        imageUrl: string;
+    };
+}
+
+interface CurrentMember {
+    id: string;
+    role: MemberRole;
+}
 
 
 interface ChatItemProps {
     id: string;
     content: string;
-    member: Member & {
-        profile: Profile
-    };
+    member: ChatMember;
     timestamp: string;
     fileUrl: string | null;
     deleted: boolean;
-    currentMember: Member;
+    currentMember: CurrentMember;
     isUpdated: boolean;
     socketUrl: string;
     socketQuery: Record<string, string>;
@@ -94,6 +106,7 @@ const ChatItemComponent = ({
     const { onOpen } = useModal();
     const router = useRouter();
     const { setReply } = useReplyStore();
+    const safeFileUrl = fileUrl ? normalizeMediaUrl(fileUrl) : null;
     
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -129,22 +142,13 @@ const ChatItemComponent = ({
 
     const isLoading = form.formState.isSubmitting;
 
-    const getFileNameFromUrl = (url: string) => {
-        try {
-            const parsedUrl = new URL(url);
-            return decodeURIComponent(parsedUrl.pathname.split('/').filter(Boolean).pop() || 'file');
-        } catch {
-            return decodeURIComponent(url.split('/').filter(Boolean).pop() || 'file');
-        }
-    };
-
-    const fileName = fileUrl ? getFileNameFromUrl(fileUrl) : 'file';
+    const fileName = fileUrl ? getMediaFileName(fileUrl) : 'file';
     const fileType = fileName.includes('.')
         ? fileName.split('.').pop()?.toLowerCase()
         : undefined;
 
-    const isAdmin = currentMember.role === MemberRole.ADMIN;
-    const isModerator = currentMember.role === MemberRole.MODERATOR;
+    const isAdmin = currentMember.role === MEMBER_ROLE.ADMIN;
+    const isModerator = currentMember.role === MEMBER_ROLE.MODERATOR;
     const isOwner = currentMember.id === member.id;
     const canDeleteMessage = !deleted && (isAdmin || isModerator || isOwner);
     const canEditMessage = !deleted && isOwner && !fileUrl;
@@ -152,11 +156,15 @@ const ChatItemComponent = ({
     const canReply = !deleted;
 
     // File type checks
-    const isImage = fileType && ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(fileType);
-    const isVideo = fileType && ['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(fileType);
-    const isAudio = fileType && ['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(fileType);
-    const isPDF = fileType === 'pdf';
-    const isDocument = fileType && ['doc', 'docx', 'txt', 'rtf'].includes(fileType);
+    const originalFileType = fileName.includes('.')
+        ? fileName.split('.').pop()?.toLowerCase()
+        : undefined;
+
+    const isImage = originalFileType && ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(originalFileType);
+    const isVideo = originalFileType && ['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(originalFileType);
+    const isAudio = originalFileType && ['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(originalFileType);
+    const isPDF = originalFileType === 'pdf';
+    const isDocument = originalFileType && ['doc', 'docx', 'txt', 'rtf'].includes(originalFileType);
 
 
     const onSubmit = async (values: z.infer<typeof formSchema>) => {
@@ -359,22 +367,20 @@ const ChatItemComponent = ({
                 )}
 
                 {/* File Attachments */}
-                {fileUrl && !deleted && (
+                {safeFileUrl && !deleted && (
                     <div className="mt-2">
                         {/* Image Preview */}
                         {isImage && (
                             <a
                                 title="View Image"
-                                href={fileUrl}
+                                href={safeFileUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="relative aspect-square rounded-md overflow-hidden border flex items-center bg-secondary max-w-sm group/image"
                             >
-                                <Image
-                                    src={fileUrl}
+                                <img
+                                    src={safeFileUrl}
                                     alt={content || "Image"}
-                                    width={400}
-                                    height={400}
                                     className="object-cover w-full h-full hover:scale-105 transition"
                                 />
                                 <div className="absolute inset-0 bg-black/0 group-hover/image:bg-black/10 transition flex items-center justify-center">
@@ -391,7 +397,7 @@ const ChatItemComponent = ({
                                     className="w-full h-auto max-h-96"
                                     preload="metadata"
                                 >
-                                    <source src={fileUrl} type={`video/${fileType}`} />
+                                    <source src={safeFileUrl} type={`video/${originalFileType}`} />
                                     Your browser does not support video playback.
                                 </video>
                             </div>
@@ -406,7 +412,7 @@ const ChatItemComponent = ({
                                         {fileName}
                                     </p>
                                     <audio controls className="w-full mt-2">
-                                        <source src={fileUrl} type={`audio/${fileType}`} />
+                                        <source src={safeFileUrl} type={`audio/${originalFileType}`} />
                                         Your browser does not support audio playback.
                                     </audio>
                                 </div>
@@ -416,7 +422,7 @@ const ChatItemComponent = ({
                         {/* PDF Preview */}
                         {isPDF && (
                             <a
-                                href={fileUrl}
+                                href={safeFileUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-x-3 p-3 rounded-md bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 transition border border-red-200 dark:border-red-900/30 max-w-md group/pdf"
@@ -437,7 +443,7 @@ const ChatItemComponent = ({
                         {/* Other Documents */}
                         {isDocument && (
                             <a
-                                href={fileUrl}
+                                href={safeFileUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-x-3 p-3 rounded-md bg-blue-50 dark:bg-blue-900/10 hover:bg-blue-100 dark:hover:bg-blue-900/20 transition border border-blue-200 dark:border-blue-900/30 max-w-md group/doc"
@@ -448,7 +454,7 @@ const ChatItemComponent = ({
                                         {fileName}
                                     </p>
                                     <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                        {fileType?.toUpperCase()} Document
+                                        {originalFileType?.toUpperCase()} Document
                                     </p>
                                 </div>
                                 <Download className="h-5 w-5 text-blue-600 opacity-0 group-hover/doc:opacity-100 transition flex-shrink-0" />
@@ -458,7 +464,7 @@ const ChatItemComponent = ({
                         {/* Generic File (fallback) */}
                         {!isImage && !isVideo && !isAudio && !isPDF && !isDocument && (
                             <a
-                                href={fileUrl}
+                                href={safeFileUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-x-3 p-3 rounded-md bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition border max-w-md group/file"
@@ -469,7 +475,7 @@ const ChatItemComponent = ({
                                         {fileName}
                                     </p>
                                     <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                        {fileType?.toUpperCase() || 'File'}
+                                        {originalFileType?.toUpperCase() || 'File'}
                                     </p>
                                 </div>
                                 <Download className="h-5 w-5 text-zinc-500 opacity-0 group-hover/file:opacity-100 transition flex-shrink-0" />

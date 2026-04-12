@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { NavigationItem } from "./navigation-item";
 import { ModeToggle } from "@/components/mode-toggle";
 import { UserButton } from "@clerk/nextjs";
+import { NavigationDm } from "./navigation-dm";
 export const NavigationSidebar = async() => {
     const profile = await currentProfile();
     if (!profile) {
@@ -15,6 +16,7 @@ export const NavigationSidebar = async() => {
 
     const server = await db.server.findMany({
         where: {
+            isDm: false,
             members:{
                 some:{
                     profileId: profile.id
@@ -25,7 +27,7 @@ export const NavigationSidebar = async() => {
     return (
         <div className="space-y-4 flex flex-col items-center h-full
         text-primary w-full dark:bg-[#121214] bg-[#E5E8EB] py-3">
-            <NavigationAction />
+            <NavigationDm />
             <Separator 
                 className="h-[2px] bg-zinc-300 dark:bg-zinc-700
                 rounded-md w-10 mx-auto"
@@ -40,6 +42,7 @@ export const NavigationSidebar = async() => {
                         />
                     </div>
                 ))}
+                <NavigationAction />
             </ScrollArea>
             <div className="pb-3 mt-auto flex items-center flex-col gap-y-4">
                 <ModeToggle />

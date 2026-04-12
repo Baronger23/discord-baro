@@ -406,6 +406,7 @@ export const MessageFileModal = () => {
                                                                     
                                                                     {/* Remove Button */}
                                                                     <button
+                                                                        title="remove file"
                                                                         onClick={() => handleRemoveFile(index)}
                                                                         type="button"
                                                                         className={`flex-shrink-0 p-1.5 rounded-full shadow-sm transition ${

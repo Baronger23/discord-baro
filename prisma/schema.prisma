@@ -33,6 +33,11 @@ model Profile {
   members  Member[]
   channels Channel[]
 
+  sentFriendRequests     FriendRequest[] @relation("FriendRequestSender")
+  receivedFriendRequests FriendRequest[] @relation("FriendRequestReceiver")
+  friendshipsAsOne       Friendship[]    @relation("FriendshipProfileOne")
+  friendshipsAsTwo       Friendship[]    @relation("FriendshipProfileTwo")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
@@ -42,23 +47,34 @@ model Profile {
 }
 
 model Server {
-  id         String @id @default(uuid())
+  id         String  @id @default(uuid())
   name       String
-  imageUrl   String @db.Text
-  inviteCode String @unique
+  imageUrl   String  @db.Text
+  inviteCode String  @unique
+  isDm       Boolean @default(false)
+  dmKey      String? @unique
 
   profileId String
   profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
-  members  Member[]
-  channels Channel[]
+  members      Member[]
+  channels     Channel[]
+  friendshipDm Friendship? @relation("FriendshipDmServer")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([profileId]) // Lấy servers của user
   @@index([inviteCode]) // Join server bằng invite code
+  @@index([isDm])
   @@index([createdAt]) // Sort servers by creation date
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELED
 }
 
 enum MemberRole {
@@ -247,4 +263,43 @@ model DirectMessage {
   @@index([conversationId, deleted, createdAt(sort: Desc)]) // Filter non-deleted DMs với sort
   @@index([memberId, createdAt(sort: Desc)]) // Member's DM history
   @@index([createdAt]) // Global DM timeline
+}
+
+model FriendRequest {
+  id String @id @default(uuid())
+
+  senderProfileId String
+  senderProfile   Profile @relation("FriendRequestSender", fields: [senderProfileId], references: [id], onDelete: Cascade)
+
+  receiverProfileId String
+  receiverProfile   Profile @relation("FriendRequestReceiver", fields: [receiverProfileId], references: [id], onDelete: Cascade)
+
+  status FriendRequestStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([senderProfileId, receiverProfileId])
+  @@index([receiverProfileId, status])
+  @@index([senderProfileId, status])
+}
+
+model Friendship {
+  id String @id @default(uuid())
+
+  profileOneId String
+  profileOne   Profile @relation("FriendshipProfileOne", fields: [profileOneId], references: [id], onDelete: Cascade)
+
+  profileTwoId String
+  profileTwo   Profile @relation("FriendshipProfileTwo", fields: [profileTwoId], references: [id], onDelete: Cascade)
+
+  dmServerId String? @unique
+  dmServer   Server? @relation("FriendshipDmServer", fields: [dmServerId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([profileOneId, profileTwoId])
+  @@index([profileOneId])
+  @@index([profileTwoId])
 }

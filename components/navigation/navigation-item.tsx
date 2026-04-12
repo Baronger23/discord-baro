@@ -3,6 +3,7 @@ import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
+import { normalizeMediaUrl } from "@/lib/media-url";
 
 interface NavigationItemProps {
     id: string;
@@ -17,9 +18,10 @@ export const NavigationItem = ({
 }: NavigationItemProps) => {
     const params = useParams();
     const router = useRouter();
+    const safeImageUrl = normalizeMediaUrl(imageUrl);
     
     // Check if it's a dicebear SVG (external API)
-    const isDicebearSvg = imageUrl?.includes('dicebear.com') && imageUrl?.includes('.svg');
+    const isDicebearSvg = safeImageUrl?.includes('dicebear.com') && safeImageUrl?.includes('.svg');
     
     const onClick = () => {
         router.push(`/servers/${id}`);
@@ -48,7 +50,7 @@ export const NavigationItem = ({
                     <Image
                         fill
                         sizes="48px"
-                        src={imageUrl}
+                        src={safeImageUrl}
                         alt={name}
                         unoptimized={isDicebearSvg}
                     />

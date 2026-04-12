@@ -28,7 +28,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'VibeCord',
+  title: 'BTCord',
   description: 'A real-time chat application built with Next.js, Socket.IO, and Prisma ORM.',
 }
 
